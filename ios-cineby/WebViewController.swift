@@ -165,45 +165,57 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             setInterval(broadcastActiveSite, 1000);
             broadcastActiveSite();
 
-            // Inject custom Mstream playback controls on both portals
+            // Inject custom Mstream dedicated playback controls
+            // Overlay is placed on document.body with position:fixed to guarantee it
+            // is always on top of any player library's own touch-intercept layers.
             function injectMstreamControls() {
               var video = document.querySelector('video');
               if (!video) return;
-              
-              // Verify if the active video already has controls setup in its parent
-              if (video.dataset.hasMstreamControls === 'true') {
-                var existing = document.getElementById('mstream-controls-overlay');
-                if (existing && existing.parentNode === video.parentNode) {
-                  return;
+
+              var existing = document.getElementById('mstream-controls-overlay');
+              if (existing) {
+                // Overlay exists — ensure it's still attached to body and has our ref
+                if (existing.parentNode !== document.body) {
+                  document.body.appendChild(existing);
                 }
+                return;
               }
-              
-              // Clean up any stale overlay
-              var stale = document.getElementById('mstream-controls-overlay');
-              if (stale) {
-                stale.remove();
-              }
-              
+
               var overlay = document.createElement('div');
               overlay.id = 'mstream-controls-overlay';
-              overlay.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; gap: 24px; z-index: 2147483647; pointer-events: auto; opacity: 0; transition: opacity 0.3s ease-in-out; background: rgba(0,0,0,0.4); padding: 12px 24px; border-radius: 30px;';
-              
+              // Fixed positioning on body — always above everything
+              overlay.style.cssText = [
+                'position: fixed',
+                'top: 50%',
+                'left: 50%',
+                'transform: translate(-50%, -50%)',
+                'display: flex',
+                'align-items: center',
+                'justify-content: center',
+                'gap: 24px',
+                'z-index: 2147483647',
+                'pointer-events: auto',
+                'opacity: 0',
+                'transition: opacity 0.3s ease-in-out',
+                'background: rgba(0,0,0,0.45)',
+                'padding: 12px 24px',
+                'border-radius: 30px',
+                '-webkit-transform: translate(-50%, -50%)'
+              ].join('; ');
+
               overlay.innerHTML = `
-                <button id="mstream-btn-back" style="width: 50px; height: 50px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.4); background: rgba(20,20,20,0.8); color: white; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; -webkit-tap-highlight-color: transparent;">↺ 5s</button>
-                <button id="mstream-btn-play" style="width: 60px; height: 60px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.4); background: rgba(20,20,20,0.8); color: white; font-size: 20px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; -webkit-tap-highlight-color: transparent;">▶</button>
-                <button id="mstream-btn-forward" style="width: 50px; height: 50px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.4); background: rgba(20,20,20,0.8); color: white; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; -webkit-tap-highlight-color: transparent;">5s ↻</button>
+                <button id="mstream-btn-back" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">↺ 5s</button>
+                <button id="mstream-btn-play" style="width:60px;height:60px;border-radius:30px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:20px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">▶</button>
+                <button id="mstream-btn-forward" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">5s ↻</button>
               `;
-              
-              var parent = video.parentNode;
-              if (getComputedStyle(parent).position === 'static') {
-                parent.style.position = 'relative';
-              }
-              parent.appendChild(overlay);
-              
-              var backBtn = overlay.querySelector('#mstream-btn-back');
-              var playBtn = overlay.querySelector('#mstream-btn-play');
-              var forwardBtn = overlay.querySelector('#mstream-btn-forward');
-              
+
+              // Append directly to body for guaranteed top z-index stacking
+              document.body.appendChild(overlay);
+
+              var backBtn = document.getElementById('mstream-btn-back');
+              var playBtn = document.getElementById('mstream-btn-play');
+              var forwardBtn = document.getElementById('mstream-btn-forward');
+
               var timer = null;
               function showControls() {
                 if (document.body.classList.contains('playback-locked')) {
@@ -222,100 +234,128 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 clearTimeout(timer);
                 timer = setTimeout(hideControls, 3000);
               }
-              
-              var lastBackTouch = 0;
-              function handleBack(e) {
-                e.stopPropagation();
-                if (e.type === 'touchstart') {
-                  lastBackTouch = Date.now();
-                } else if (e.type === 'click' && Date.now() - lastBackTouch < 500) {
-                  return;
-                }
-                e.preventDefault();
-                video.currentTime = Math.max(0, video.currentTime - 5);
-                showControls();
+
+              // Temporarily freeze any player intercept layer during button press
+              // so our touchstart fires cleanly without the player stealing the event
+              function freezePlayerInterceptors() {
+                try {
+                  var v = document.querySelector('video');
+                  if (!v) return;
+                  var el = v.parentNode;
+                  var depth = 0;
+                  while (el && el !== document.body && depth < 6) {
+                    var pe = getComputedStyle(el).pointerEvents;
+                    if (pe !== 'none') {
+                      el.dataset.mstreamFrozenPE = pe;
+                      el.style.setProperty('pointer-events', 'none', 'important');
+                    }
+                    el = el.parentNode;
+                    depth++;
+                  }
+                } catch(e) {}
               }
-              backBtn.addEventListener('touchstart', handleBack, {passive: false});
-              backBtn.addEventListener('click', handleBack);
-              
-              var lastPlayTouch = 0;
-              function handlePlay(e) {
-                e.stopPropagation();
-                if (e.type === 'touchstart') {
-                  lastPlayTouch = Date.now();
-                } else if (e.type === 'click' && Date.now() - lastPlayTouch < 500) {
-                  return;
-                }
-                e.preventDefault();
-                if (video.paused) {
-                  video.play();
-                } else {
-                  video.pause();
-                }
-                showControls();
+              function unfreezePlayerInterceptors() {
+                try {
+                  var v = document.querySelector('video');
+                  if (!v) return;
+                  var el = v.parentNode;
+                  var depth = 0;
+                  while (el && el !== document.body && depth < 6) {
+                    if (el.dataset.mstreamFrozenPE !== undefined) {
+                      el.style.removeProperty('pointer-events');
+                      delete el.dataset.mstreamFrozenPE;
+                    }
+                    el = el.parentNode;
+                    depth++;
+                  }
+                } catch(e) {}
               }
-              playBtn.addEventListener('touchstart', handlePlay, {passive: false});
-              playBtn.addEventListener('click', handlePlay);
-              
-              var lastForwardTouch = 0;
-              function handleForward(e) {
-                e.stopPropagation();
-                if (e.type === 'touchstart') {
-                  lastForwardTouch = Date.now();
-                } else if (e.type === 'click' && Date.now() - lastForwardTouch < 500) {
-                  return;
-                }
-                e.preventDefault();
-                video.currentTime = Math.min(video.duration, video.currentTime + 5);
-                showControls();
+
+              function makeButtonHandler(action) {
+                var lastTouch = 0;
+                return {
+                  touchstart: function(e) {
+                    e.stopPropagation();
+                    lastTouch = Date.now();
+                    action(e);
+                    showControls();
+                  },
+                  click: function(e) {
+                    e.stopPropagation();
+                    if (Date.now() - lastTouch < 600) return; // dedupe
+                    action(e);
+                    showControls();
+                  },
+                  touchend: function(e) {
+                    e.stopPropagation();
+                    unfreezePlayerInterceptors();
+                  }
+                };
               }
-              forwardBtn.addEventListener('touchstart', handleForward, {passive: false});
-              forwardBtn.addEventListener('click', handleForward);
-              
-              video.addEventListener('play', function() {
-                playBtn.innerText = '❚❚';
+
+              var backHandler = makeButtonHandler(function(e) {
+                e.preventDefault();
+                var v = document.querySelector('video');
+                if (v) v.currentTime = Math.max(0, v.currentTime - 5);
               });
-              video.addEventListener('pause', function() {
-                playBtn.innerText = '▶';
+              backBtn.addEventListener('touchstart', backHandler.touchstart, {passive: false});
+              backBtn.addEventListener('touchend', backHandler.touchend, {passive: false});
+              backBtn.addEventListener('click', backHandler.click);
+
+              var playHandler = makeButtonHandler(function(e) {
+                e.preventDefault();
+                var v = document.querySelector('video');
+                if (!v) return;
+                if (v.paused) { v.play(); } else { v.pause(); }
               });
-              
-              // Set initial state
-              playBtn.innerText = video.paused ? '▶' : '❚❚';
-              
-              // Event listeners on parent and video to display controls on interaction
-              parent.addEventListener('mousemove', showControls);
-              parent.addEventListener('click', showControls, true);
-              parent.addEventListener('touchstart', showControls, {passive: true, capture: true});
-              
-              video.addEventListener('click', showControls, true);
-              video.addEventListener('touchstart', showControls, {passive: true, capture: true});
-              
-              // Mark the video as having controls setup and expose showControls
-              video.dataset.hasMstreamControls = 'true';
+              playBtn.addEventListener('touchstart', playHandler.touchstart, {passive: false});
+              playBtn.addEventListener('touchend', playHandler.touchend, {passive: false});
+              playBtn.addEventListener('click', playHandler.click);
+
+              var forwardHandler = makeButtonHandler(function(e) {
+                e.preventDefault();
+                var v = document.querySelector('video');
+                if (v) v.currentTime = Math.min(v.duration, v.currentTime + 5);
+              });
+              forwardBtn.addEventListener('touchstart', forwardHandler.touchstart, {passive: false});
+              forwardBtn.addEventListener('touchend', forwardHandler.touchend, {passive: false});
+              forwardBtn.addEventListener('click', forwardHandler.click);
+
+              // Track play/pause state
+              function syncPlayBtn() {
+                var v = document.querySelector('video');
+                if (!v) return;
+                playBtn.innerText = v.paused ? '▶' : '❚❚';
+              }
+              setInterval(syncPlayBtn, 500);
+              syncPlayBtn();
+
+              // Expose showControls for global touch handler
               overlay.showMstreamControls = showControls;
-              
+
               showControls();
             }
             setInterval(injectMstreamControls, 1000);
             injectMstreamControls();
 
-            // Set up global touch/click capture listener to guarantee overlay visibility on iOS
+            // Set up global touch/click capture listener to show controls on screen tap
+            // Since overlay is now fixed on body, any tap anywhere should show it
             if (!window.hasMstreamTouchListeners) {
               window.hasMstreamTouchListeners = true;
               var handleGlobalTouch = function(e) {
+                // Skip taps on our own buttons
+                var tid = e.target && e.target.id;
+                if (tid === 'mstream-btn-play' || tid === 'mstream-btn-back' || tid === 'mstream-btn-forward') {
+                  return;
+                }
+                // Skip taps on the overlay container itself (between buttons)
+                if (e.target && e.target.id === 'mstream-controls-overlay') return;
+
                 var video = document.querySelector('video');
                 if (!video) return;
                 var overlay = document.getElementById('mstream-controls-overlay');
                 if (!overlay || typeof overlay.showMstreamControls !== 'function') return;
-                
-                if (e.target.id === 'mstream-btn-play' || e.target.id === 'mstream-btn-back' || e.target.id === 'mstream-btn-forward') {
-                  return;
-                }
-                
-                var playerContainer = video.closest('.jwplayer, .video-js, .plyr, .dplayer, .artplayer, [class*="player" i], [id*="player" i]') || video.parentNode;
-                if (playerContainer && playerContainer.contains(e.target)) {
-                  overlay.showMstreamControls();
-                }
+                overlay.showMstreamControls();
               };
               document.addEventListener('touchstart', handleGlobalTouch, {passive: true, capture: true});
               document.addEventListener('click', handleGlobalTouch, {capture: true});
