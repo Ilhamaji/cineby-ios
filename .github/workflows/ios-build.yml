@@ -66,22 +66,28 @@ jobs:
             pod install --repo-update
           fi
 
-      - name: Install fastlane
+      - name: Build unsigned .app archive
+        working-directory: capacitor-app/ios/App
         run: |
-          sudo gem install fastlane -NV
+          set -e
+          ARCHIVE_PATH="$(pwd)/build/App.xcarchive"
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos -archivePath "$ARCHIVE_PATH" archive CODE_SIGNING_ALLOWED=NO
 
-      - name: Run Fastlane build (artifact)
-        env:
-          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
-        working-directory: ${{ github.workspace }}
+      - name: Pack unsigned .ipa
+        working-directory: capacitor-app/ios/App
         run: |
-          fastlane ios build_artifact
+          set -e
+          ARCHIVE_DIR="$(pwd)/build/App.xcarchive"
+          APP_PATH="$ARCHIVE_DIR/Products/Applications/App.app"
+          mkdir -p payload
+          rm -rf payload/Payload || true
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r ../unsigned-App.ipa Payload
+          ls -la ../unsigned-App.ipa
 
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: capacitor-app/ios/artifacts/**/*.ipa
+          path: capacitor-app/ios/App/unsigned-App.ipa
