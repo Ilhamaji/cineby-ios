@@ -318,27 +318,55 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 overlay.id = 'mstream-controls-overlay';
                 overlay.style.cssText = [
                   'position: fixed',
-                  'top: 50%',
-                  'left: 50%',
-                  'transform: translate(-50%, -50%)',
-                  'display: flex',
-                  'align-items: center',
-                  'justify-content: center',
-                  'gap: 24px',
+                  'top: 0',
+                  'left: 0',
+                  'width: 100%',
+                  'height: 100%',
                   'z-index: 2147483647',
-                  'pointer-events: auto',
+                  'pointer-events: none',
                   'opacity: 0',
-                  'transition: opacity 0.3s ease-in-out',
-                  'background: rgba(0,0,0,0.45)',
-                  'padding: 12px 24px',
-                  'border-radius: 30px',
-                  '-webkit-transform: translate(-50%, -50%)'
+                  'transition: opacity 0.3s ease-in-out'
                 ].join('; ');
 
                 overlay.innerHTML = `
-                  <button id="mstream-btn-back" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">↺ 5s</button>
-                  <button id="mstream-btn-play" style="width:60px;height:60px;border-radius:30px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:20px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">▶</button>
-                  <button id="mstream-btn-forward" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.4);background:rgba(20,20,20,0.85);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;">5s ↻</button>
+                  <style>
+                    #mstream-slider-progress::-webkit-slider-runnable-track {
+                      width: 100%;
+                      height: 6px;
+                      cursor: pointer;
+                      background: transparent;
+                      border-radius: 3px;
+                    }
+                    #mstream-slider-progress::-webkit-slider-thumb {
+                      height: 16px;
+                      width: 16px;
+                      border-radius: 50%;
+                      background: #00ff88;
+                      cursor: pointer;
+                      -webkit-appearance: none;
+                      margin-top: -5px;
+                      box-shadow: 0 0 10px rgba(0,255,136,0.5);
+                      transition: transform 0.1s, background-color 0.1s;
+                    }
+                    #mstream-slider-progress:active::-webkit-slider-thumb {
+                      transform: scale(1.3);
+                      background: #00ffaa;
+                    }
+                  </style>
+                  
+                  <!-- Center Playback Pill -->
+                  <div id="mstream-center-pill" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); -webkit-transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; gap: 24px; pointer-events: auto; background: rgba(15, 15, 20, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px 24px; border-radius: 35px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);">
+                    <button id="mstream-btn-back" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition: background 0.2s;">↺ 5s</button>
+                    <button id="mstream-btn-play" style="width:60px;height:60px;border-radius:30px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:white;font-size:20px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition: background 0.2s;">▶</button>
+                    <button id="mstream-btn-forward" style="width:50px;height:50px;border-radius:25px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:white;font-size:14px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center;outline:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition: background 0.2s;">5s ↻</button>
+                  </div>
+
+                  <!-- Bottom Dedicated Timebar & Timestamp -->
+                  <div id="mstream-bottom-bar" style="position: absolute; bottom: 30px; left: 40px; right: 40px; background: rgba(15, 15, 20, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 12px 20px; display: flex; align-items: center; gap: 15px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45); pointer-events: auto;">
+                    <span id="mstream-txt-current" style="color: rgba(255,255,255,0.9); font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-variant-numeric: tabular-nums; min-width: 45px; text-align: right;">0:00</span>
+                    <input type="range" id="mstream-slider-progress" min="0" max="100" value="0" style="flex-grow: 1; height: 6px; -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 3px; outline: none; margin: 0; cursor: pointer; transition: background 0.1s;">
+                    <span id="mstream-txt-duration" style="color: rgba(255,255,255,0.6); font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-variant-numeric: tabular-nums; min-width: 45px;">0:00</span>
+                  </div>
                 `;
 
                 document.body.appendChild(overlay);
@@ -346,6 +374,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 var backBtn = document.getElementById('mstream-btn-back');
                 var playBtn = document.getElementById('mstream-btn-play');
                 var forwardBtn = document.getElementById('mstream-btn-forward');
+                var slider = document.getElementById('mstream-slider-progress');
+                var txtCur = document.getElementById('mstream-txt-current');
+                var txtDur = document.getElementById('mstream-txt-duration');
 
                 var timer = null;
                 function showControls() {
@@ -358,6 +389,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                   resetTimer();
                 }
                 function hideControls() {
+                  if (slider && slider.mstreamDragging) return;
                   overlay.style.opacity = '0';
                   overlay.style.pointerEvents = 'none';
                 }
@@ -433,13 +465,80 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 forwardBtn.addEventListener('touchend', forwardHandler.touchend, {passive: false});
                 forwardBtn.addEventListener('click', forwardHandler.click);
 
-                function syncPlayBtn() {
+                function formatTime(secs) {
+                  if (isNaN(secs) || secs === Infinity) return '0:00';
+                  var m = Math.floor(secs / 60);
+                  var s = Math.floor(secs % 60);
+                  if (s < 10) s = '0' + s;
+                  return m + ':' + s;
+                }
+
+                function syncProgress() {
+                  var v = document.querySelector('video');
+                  if (!v) return;
+                  
+                  if (txtCur) txtCur.innerText = formatTime(v.currentTime);
+                  if (txtDur && v.duration) txtDur.innerText = formatTime(v.duration);
+                  
+                  if (slider && !slider.mstreamDragging) {
+                    if (v.duration) {
+                      var pct = (v.currentTime / v.duration) * 100;
+                      slider.value = pct;
+                      slider.style.background = 'linear-gradient(to right, #00ff88 0%, #00ff88 ' + pct + '%, rgba(255,255,255,0.2) ' + pct + '%, rgba(255,255,255,0.2) 100%)';
+                    } else {
+                      slider.value = 0;
+                      slider.style.background = 'rgba(255,255,255,0.2)';
+                    }
+                  }
+                }
+
+                if (slider) {
+                  slider.addEventListener('input', function() {
+                    var v = document.querySelector('video');
+                    if (!v || !v.duration) return;
+                    var pct = parseFloat(slider.value);
+                    var newTime = (pct / 100) * v.duration;
+                    if (txtCur) txtCur.innerText = formatTime(newTime);
+                    slider.style.background = 'linear-gradient(to right, #00ff88 0%, #00ff88 ' + pct + '%, rgba(255,255,255,0.2) ' + pct + '%, rgba(255,255,255,0.2) 100%)';
+                  });
+
+                  slider.addEventListener('change', function() {
+                    var v = document.querySelector('video');
+                    if (!v || !v.duration) return;
+                    var pct = parseFloat(slider.value);
+                    v.currentTime = (pct / 100) * v.duration;
+                  });
+
+                  slider.addEventListener('touchstart', function(e) {
+                    e.stopPropagation();
+                    slider.mstreamDragging = true;
+                    clearTimeout(timer);
+                  }, {passive: true});
+
+                  slider.addEventListener('touchend', function(e) {
+                    e.stopPropagation();
+                    slider.mstreamDragging = false;
+                    var v = document.querySelector('video');
+                    if (v && v.duration) {
+                      var pct = parseFloat(slider.value);
+                      v.currentTime = (pct / 100) * v.duration;
+                    }
+                    resetTimer();
+                  }, {passive: true});
+
+                  slider.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                  });
+                }
+
+                function syncPlayerState() {
                   var v = document.querySelector('video');
                   if (!v) return;
                   playBtn.innerText = v.paused ? '▶' : '❚❚';
+                  syncProgress();
                 }
-                setInterval(syncPlayBtn, 500);
-                syncPlayBtn();
+                setInterval(syncPlayerState, 500);
+                syncPlayerState();
 
                 overlay.showMstreamControls = showControls;
                 showControls();
@@ -453,7 +552,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 var handleGlobalTouch = function(e) {
                   var tid = e.target && e.target.id;
                   if (tid === 'mstream-btn-play' || tid === 'mstream-btn-back' || tid === 'mstream-btn-forward') return;
-                  if (e.target && e.target.id === 'mstream-controls-overlay') return;
+                  if (e.target && (e.target.id === 'mstream-controls-overlay' || e.target.closest('#mstream-controls-overlay'))) return;
                   var video = document.querySelector('video');
                   if (!video) return;
                   var overlay = document.getElementById('mstream-controls-overlay');
