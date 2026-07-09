@@ -57,6 +57,85 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     func setupWebView() {
         let contentController = WKUserContentController()
         
+        // === EARLY SCRIPT: injected at document START, runs in ALL frames ===
+        // Locks video.controls at prototype level BEFORE any player script runs.
+        let earlyJS = """
+        (function() {
+          try {
+            // Block 'controls' attribute via prototype descriptor — runs before player code
+            if (typeof HTMLVideoElement !== 'undefined') {
+              try {
+                Object.defineProperty(HTMLVideoElement.prototype, 'controls', {
+                  get: function() { return false; },
+                  set: function() {},
+                  configurable: true,
+                  enumerable: true
+                });
+              } catch(e) {}
+
+              // Block setAttribute('controls', ...) at prototype level
+              var _origSetAttr = HTMLVideoElement.prototype.setAttribute;
+              HTMLVideoElement.prototype.setAttribute = function(name, val) {
+                if (name === 'controls' || name === 'Controls') return;
+                return _origSetAttr.apply(this, arguments);
+              };
+            }
+
+            // Inject webkit media controls hiding CSS immediately
+            var earlyStyle = document.getElementById('mstream-early-hide');
+            if (!earlyStyle) {
+              earlyStyle = document.createElement('style');
+              earlyStyle.id = 'mstream-early-hide';
+              (document.head || document.documentElement).appendChild(earlyStyle);
+            }
+            earlyStyle.innerHTML = [
+              'video::-webkit-media-controls { display: none !important; }',
+              'video::-webkit-media-controls-enclosure { display: none !important; }',
+              'video::-webkit-media-controls-panel { display: none !important; }',
+              'video::-webkit-media-controls-play-button { display: none !important; }',
+              'video::-webkit-media-controls-start-playback-button { display: none !important; }',
+              'video::-webkit-media-controls-overlay-play-button { display: none !important; }',
+              'video::-webkit-media-controls-volume-slider { display: none !important; }',
+              'video::-webkit-media-controls-timeline { display: none !important; }',
+              'video::-webkit-media-controls-current-time-display { display: none !important; }',
+              'video::-webkit-media-controls-time-remaining-display { display: none !important; }',
+              'video::-webkit-media-controls-mute-button { display: none !important; }',
+              'video::-webkit-media-controls-fullscreen-button { display: none !important; }',
+              '* { -webkit-touch-callout: none !important; }'
+            ].join(' ');
+
+            // MutationObserver: strip 'controls' attribute the moment it appears on any video
+            var controlsGuard = new MutationObserver(function(mutations) {
+              mutations.forEach(function(m) {
+                if (m.type === 'attributes' && m.attributeName === 'controls') {
+                  m.target.removeAttribute('controls');
+                }
+                if (m.type === 'childList') {
+                  m.addedNodes.forEach(function(node) {
+                    if (node.nodeName === 'VIDEO') {
+                      node.removeAttribute('controls');
+                    }
+                    if (node.querySelectorAll) {
+                      node.querySelectorAll('video').forEach(function(v) {
+                        v.removeAttribute('controls');
+                      });
+                    }
+                  });
+                }
+              });
+            });
+            controlsGuard.observe(document.documentElement, {
+              attributes: true,
+              attributeFilter: ['controls'],
+              childList: true,
+              subtree: true
+            });
+          } catch(e) {}
+        })();
+        """
+        let earlyScript = WKUserScript(source: earlyJS, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        contentController.addUserScript(earlyScript)
+
         let js = """
         (function() {
           try {
@@ -363,55 +442,57 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
 
             // Persistently hide default player controls, timelines, and timestamps.
             // Covers all major player libraries and common class patterns.
-            var HIDE_CONTROLS_CSS = `
+            var HIDE_CONTROLS_CSS = [
+              /* WebKit native video controls (most important!) */
+              'video::-webkit-media-controls { display:none!important; }',
+              'video::-webkit-media-controls-enclosure { display:none!important; }',
+              'video::-webkit-media-controls-panel { display:none!important; }',
+              'video::-webkit-media-controls-play-button { display:none!important; }',
+              'video::-webkit-media-controls-start-playback-button { display:none!important; }',
+              'video::-webkit-media-controls-overlay-play-button { display:none!important; }',
+              'video::-webkit-media-controls-volume-slider { display:none!important; }',
+              'video::-webkit-media-controls-timeline { display:none!important; }',
+              'video::-webkit-media-controls-current-time-display { display:none!important; }',
+              'video::-webkit-media-controls-time-remaining-display { display:none!important; }',
+              'video::-webkit-media-controls-mute-button { display:none!important; }',
+              'video::-webkit-media-controls-fullscreen-button { display:none!important; }',
               /* JW Player */
-              .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
-              .jw-nextup-container, .jw-display-icon-container,
-              .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
-              .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
+              '.jw-controls,.jw-controlbar,.jw-title,.jw-logo,',
+              '.jw-nextup-container,.jw-display-icon-container,',
+              '.jw-settings-menu,.jw-settings-submenu,.jw-settings-content,',
+              '.jw-submenu,.jw-icon-inline,.jw-slider-container,.jw-time-tip,',
               /* Video.js */
-              .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
+              '.vjs-control-bar,.vjs-big-play-button,.vjs-loading-spinner,.vjs-poster,',
               /* Plyr */
-              .plyr__controls, .plyr__play-large,
+              '.plyr__controls,.plyr__play-large,.plyr__control--overlaid,',
               /* Artplayer */
-              .art-control, .art-controls, .art-bottom, .art-progress,
-              .art-state, .art-state-play, .art-play, .art-poster,
-              .art-layer-mask, .art-layer, .art-layers, .art-notice,
+              '.art-control,.art-controls,.art-bottom,.art-progress,',
+              '.art-state,.art-state-play,.art-play,.art-poster,',
+              '.art-layer-mask,.art-layer,.art-layers,.art-notice,',
               /* DPlayer */
-              .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
+              '.dplayer-controller,.dplayer-bar-wrap,.dplayer-menu,.dplayer-setting-box,',
               /* Shaka Player */
-              .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
+              '.shaka-bottom-controls,.shaka-settings-menu,.shaka-overflow-menu,',
               /* HLS.js / Flowplayer */
-              .fp-controls, .fp-ui, .fp-elapsed, .fp-duration,
+              '.fp-controls,.fp-ui,.fp-elapsed,.fp-duration,',
               /* Cineby / Generic */
-              .cb-controlbar, .cb-control, .cb-controls,
-              .player-controlbar, .player-bottom, .player-ui, .player-controls,
-              .video-controlbar, .video-bottombar, .video-controls,
-              [class*='controlbar']:not(#mstream-controls-overlay),
-              [class*='control-bar']:not(#mstream-controls-overlay),
-              [class*='playerbar']:not(#mstream-controls-overlay) {
-                  display: none !important;
-                  opacity: 0 !important;
-                  visibility: hidden !important;
-                  pointer-events: none !important;
-              }
-              /* Always keep our dedicated controls fully interactive */
-              #mstream-controls-overlay {
-                  display: flex !important;
-                  visibility: visible !important;
-                  pointer-events: auto !important;
-              }
-              #mstream-controls-overlay * {
-                  display: flex !important;
-                  visibility: visible !important;
-                  pointer-events: auto !important;
-              }
-              #mstream-controls-overlay[style*="opacity: 0"],
-              #mstream-controls-overlay[style*="opacity:0"] {
-                  opacity: 0 !important;
-                  pointer-events: none !important;
-              }
-            `;
+              '.cb-controlbar,.cb-control,.cb-controls,',
+              '.player-controlbar,.player-bottom,.player-ui,.player-controls,',
+              '.video-controlbar,.video-bottombar,.video-controls,',
+              /* Wide attribute-based selectors — catch-all for unknown players */
+              '[class*=controlbar]:not(#mstream-controls-overlay),',
+              '[class*=control-bar]:not(#mstream-controls-overlay),',
+              '[class*=playerbar]:not(#mstream-controls-overlay),',
+              '[class*=player-control]:not(#mstream-controls-overlay),',
+              '[class*=video-control]:not(#mstream-controls-overlay)',
+              '{ display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+              /* Always keep our dedicated overlay visible */
+              '#mstream-controls-overlay { display:flex!important; visibility:visible!important; pointer-events:auto!important; }',
+              '#mstream-controls-overlay * { display:flex!important; visibility:visible!important; pointer-events:auto!important; }',
+              '#mstream-controls-overlay[style*="opacity: 0"],',
+              '#mstream-controls-overlay[style*="opacity:0"]',
+              '{ opacity:0!important; pointer-events:none!important; }'
+            ].join(' ');
 
             function hideDefaultControls() {
               // Inject persistent CSS
@@ -665,6 +746,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+        config.allowsPictureInPictureMediaPlayback = false
         if #available(iOS 10.0, *) {
             config.mediaTypesRequiringUserActionForPlayback = []
         }
@@ -1214,6 +1296,65 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         NSLog("didStartProvisionalNavigation - resetting rotate button until video is found")
         updateRotateButtonVisibility(hasVideo: false)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        NSLog("didFinishNavigation - re-injecting controls hide CSS")
+        reinjectControlsHide()
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        NSLog("didCommit - re-injecting controls hide CSS early")
+        reinjectControlsHide()
+    }
+
+    private func reinjectControlsHide() {
+        let js = """
+        (function() {
+          try {
+            var css = [
+              'video::-webkit-media-controls{display:none!important}',
+              'video::-webkit-media-controls-enclosure{display:none!important}',
+              'video::-webkit-media-controls-panel{display:none!important}',
+              'video::-webkit-media-controls-play-button{display:none!important}',
+              'video::-webkit-media-controls-overlay-play-button{display:none!important}',
+              'video::-webkit-media-controls-start-playback-button{display:none!important}',
+              'video::-webkit-media-controls-timeline{display:none!important}',
+              'video::-webkit-media-controls-volume-slider{display:none!important}',
+              'video::-webkit-media-controls-fullscreen-button{display:none!important}',
+              '.jw-controls,.jw-controlbar,.vjs-control-bar,.vjs-big-play-button',
+              ',.plyr__controls,.plyr__play-large,.plyr__control--overlaid',
+              ',.art-control,.art-controls,.art-bottom,.art-progress,.art-state,.art-play,.art-poster,.art-layer,.art-layers',
+              ',.dplayer-controller,.dplayer-bar-wrap',
+              ',.shaka-bottom-controls,.shaka-settings-menu',
+              ',.fp-controls,.fp-ui',
+              ',.player-controls,.player-controlbar,.player-bottom,.player-ui',
+              ',.video-controls,.video-controlbar,.video-bottombar',
+              ',[class*=controlbar]:not(#mstream-controls-overlay)',
+              ',[class*=control-bar]:not(#mstream-controls-overlay)',
+              ',[class*=player-control]:not(#mstream-controls-overlay)',
+              ',[class*=video-control]:not(#mstream-controls-overlay)',
+              '{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}',
+              '#mstream-controls-overlay{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
+              '#mstream-controls-overlay *{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
+              '#mstream-controls-overlay[style*="opacity: 0"],#mstream-controls-overlay[style*="opacity:0"]{opacity:0!important;pointer-events:none!important}'
+            ].join('');
+
+            var s = document.getElementById('mstream-reinject-hide');
+            if (!s) {
+              s = document.createElement('style');
+              s.id = 'mstream-reinject-hide';
+              (document.head || document.documentElement).appendChild(s);
+            }
+            s.textContent = css;
+
+            document.querySelectorAll('video').forEach(function(v) {
+              v.removeAttribute('controls');
+            });
+          } catch(e) {}
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     func setOrientationVisual(_ landscape: Bool) {
