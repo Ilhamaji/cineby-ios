@@ -222,27 +222,54 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 timer = setTimeout(hideControls, 3000);
               }
               
-              backBtn.addEventListener('click', function(e) {
+              var lastBackTouch = 0;
+              function handleBack(e) {
                 e.stopPropagation();
+                if (e.type === 'touchstart') {
+                  lastBackTouch = Date.now();
+                } else if (e.type === 'click' && Date.now() - lastBackTouch < 500) {
+                  return;
+                }
+                e.preventDefault();
                 video.currentTime = Math.max(0, video.currentTime - 5);
                 showControls();
-              });
+              }
+              backBtn.addEventListener('touchstart', handleBack, {passive: false});
+              backBtn.addEventListener('click', handleBack);
               
-              playBtn.addEventListener('click', function(e) {
+              var lastPlayTouch = 0;
+              function handlePlay(e) {
                 e.stopPropagation();
+                if (e.type === 'touchstart') {
+                  lastPlayTouch = Date.now();
+                } else if (e.type === 'click' && Date.now() - lastPlayTouch < 500) {
+                  return;
+                }
+                e.preventDefault();
                 if (video.paused) {
                   video.play();
                 } else {
                   video.pause();
                 }
                 showControls();
-              });
+              }
+              playBtn.addEventListener('touchstart', handlePlay, {passive: false});
+              playBtn.addEventListener('click', handlePlay);
               
-              forwardBtn.addEventListener('click', function(e) {
+              var lastForwardTouch = 0;
+              function handleForward(e) {
                 e.stopPropagation();
+                if (e.type === 'touchstart') {
+                  lastForwardTouch = Date.now();
+                } else if (e.type === 'click' && Date.now() - lastForwardTouch < 500) {
+                  return;
+                }
+                e.preventDefault();
                 video.currentTime = Math.min(video.duration, video.currentTime + 5);
                 showControls();
-              });
+              }
+              forwardBtn.addEventListener('touchstart', handleForward, {passive: false});
+              forwardBtn.addEventListener('click', handleForward);
               
               video.addEventListener('play', function() {
                 playBtn.innerText = '❚❚';
@@ -288,8 +315,78 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     overlay.style.opacity = '0';
                     overlay.style.pointerEvents = 'none';
                   }
+                  
+                  // Setup recursive/continuous JS enforcement
+                  if (window.mstreamLockInterval) clearInterval(window.mstreamLockInterval);
+                  
+                  var enforceHiding = function() {
+                    if (!document.body.classList.contains('playback-locked')) {
+                      if (window.mstreamLockInterval) clearInterval(window.mstreamLockInterval);
+                      return;
+                    }
+                    var selectors = [
+                      '.jw-controls', '.jw-controlbar', '.jw-title', '.jw-logo', '.jw-nextup-container', '.jw-display', '.jw-display-icon', '.jw-display-icon-container',
+                      '.vjs-control-bar', '.vjs-big-play-button', '.vjs-loading-spinner', '.vjs-poster',
+                      '.plyr__controls', 
+                      '.art-control', '.art-controls', '.art-mask', '.art-state', '.art-state-play', '.art-play', '.art-poster', '.art-bottom', '.art-progress',
+                      '.jw-settings-menu', '.jw-settings-submenu', '.jw-settings-content', '.jw-submenu', '.jw-icon-inline', '.jw-slider-container', '.jw-time-tip',
+                      '.dplayer-menu', '.dplayer-setting-box', '.shaka-settings-menu',
+                      '[class*="control" i]', '[class*="toolbar" i]', '[class*="play-button" i]', '[class*="play-icon" i]', 
+                      '[class*="play-btn" i]', '[class*="playbutton" i]', '[class*="playButton" i]', '[class*="big-play" i]', 
+                      '[class*="display-icon" i]', '[class*="display-btn" i]', '[class*="overlay" i]', '[class*="mask" i]', 
+                      '[class*="poster" i]', '[class*="preview" i]', '[class*="spinner" i]', '[class*="loading" i]', 
+                      '[class*="player-controls" i]', '[class*="video-controls" i]', '[class*="button" i]', '[class*="btn" i]', 
+                      '[class*="progress" i]', '[class*="volume" i]', '[class*="time" i]', '[class*="title" i]', 
+                      '[class*="logo" i]', '[class*="menu" i]', '[class*="settings" i]', '[class*="setting" i]', 
+                      '[class*="bottom-bar" i]', '[class*="control-bar" i]', '[class*="controls-bar" i]', '[class*="player-bar" i]', 
+                      '[class*="bottom-controls" i]', '[class*="controller" i]', '[class*="dplayer" i]', '[class*="shaka" i]'
+                    ];
+                    selectors.forEach(function(sel) {
+                      try {
+                        var elements = document.querySelectorAll(sel);
+                        for (var i = 0; i < elements.length; i++) {
+                          elements[i].style.setProperty('display', 'none', 'important');
+                          elements[i].style.setProperty('opacity', '0', 'important');
+                          elements[i].style.setProperty('visibility', 'hidden', 'important');
+                          elements[i].style.setProperty('pointer-events', 'none', 'important');
+                        }
+                      } catch(e) {}
+                    });
+                    
+                    try {
+                      var videos = document.querySelectorAll('video');
+                      for (var i = 0; i < videos.length; i++) {
+                        videos[i].controls = false;
+                        videos[i].removeAttribute('controls');
+                      }
+                    } catch(e) {}
+                  };
+                  
+                  enforceHiding();
+                  window.mstreamLockInterval = setInterval(enforceHiding, 250);
                 } else {
                   document.body.classList.remove('playback-locked');
+                  if (window.mstreamLockInterval) {
+                    clearInterval(window.mstreamLockInterval);
+                    window.mstreamLockInterval = null;
+                  }
+                  
+                  // Restore elements by clearing the inline properties
+                  var selectors = [
+                    '.jw-controls', '.jw-controlbar', '.jw-settings-menu', '.jw-settings-submenu',
+                    '.art-controls', '.art-bottom', '[class*="control" i]', '[class*="bottom-bar" i]'
+                  ];
+                  selectors.forEach(function(sel) {
+                    try {
+                      var elements = document.querySelectorAll(sel);
+                      for (var i = 0; i < elements.length; i++) {
+                        elements[i].style.removeProperty('display');
+                        elements[i].style.removeProperty('opacity');
+                        elements[i].style.removeProperty('visibility');
+                        elements[i].style.removeProperty('pointer-events');
+                      }
+                    } catch(e) {}
+                  });
                 }
                 
                 // 1. Apply style override in this frame
