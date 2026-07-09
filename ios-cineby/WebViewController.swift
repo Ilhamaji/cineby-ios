@@ -7,6 +7,9 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     private var isFullscreen = false
     private var targetOrientation: UIInterfaceOrientationMask = .all
 
+    private var frameVideoVisibilities: [String: Bool] = [:]
+    private var frameFullscreenStates: [String: Bool] = [:]
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
@@ -15,6 +18,8 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         setupWebView()
         setupNativeRotateButton()
         loadWebApp()
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey(_:)), name: UIWindow.didBecomeKeyNotification, object: nil)
     }
 
     func setupWebView() {
@@ -37,26 +42,42 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
               });
             }
 
-                        var last = null;
-                        function update() {
-                            var v = hasVisibleVideo();
-                            if (v !== last) {
-                                try { window.webkit.messageHandlers.videoVisibility.postMessage(v); } catch(e){}
-                                last = v;
-                            }
-                        }
+            function forcePlaysInline() {
+              var videos = Array.from(document.querySelectorAll('video'));
+              videos.forEach(function(video) {
+                if (!video.hasAttribute('playsinline')) {
+                  video.setAttribute('playsinline', 'true');
+                  video.setAttribute('webkit-playsinline', 'true');
+                }
+              });
+            }
 
-            var observer = new MutationObserver(update);
+            var last = null;
+            function update() {
+                var v = hasVisibleVideo();
+                if (v !== last) {
+                    try { window.webkit.messageHandlers.videoVisibility.postMessage(v); } catch(e){}
+                    last = v;
+                }
+            }
+
+            var observer = new MutationObserver(function() {
+                update();
+                forcePlaysInline();
+            });
             observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
             window.addEventListener('resize', update);
             window.addEventListener('scroll', update);
-                        function postFullscreen() {
-                            var fs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.webkitIsFullScreen);
-                            try { window.webkit.messageHandlers.fullscreenState.postMessage(fs); } catch(e){}
-                        }
-                        document.addEventListener('fullscreenchange', function(){ update(); postFullscreen(); });
-                        document.addEventListener('webkitfullscreenchange', function(){ update(); postFullscreen(); });
+
+            function postFullscreen() {
+                var fs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.webkitIsFullScreen);
+                try { window.webkit.messageHandlers.fullscreenState.postMessage(fs); } catch(e){}
+            }
+            document.addEventListener('fullscreenchange', function(){ update(); postFullscreen(); });
+            document.addEventListener('webkitfullscreenchange', function(){ update(); postFullscreen(); });
+            
             update();
+            forcePlaysInline();
           } catch (e) { }
         })();
         """
@@ -98,17 +119,6 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
         nativeRotateButton.isHidden = true
         nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
-        view.addSubview(nativeRotateButton)
-
-        // Ensure button is above the web view
-        view.bringSubviewToFront(nativeRotateButton)
-
-        NSLayoutConstraint.activate([
-            nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-            nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
-            nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
-        ])
     }
 
     func loadWebApp() {
@@ -177,30 +187,84 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         return true
     }
 
+    private func getTopWindow() -> UIWindow? {
+        if #available(iOS 13.0, *) {
+            let activeScene = UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+            return activeScene?.windows.last ?? UIApplication.shared.windows.last
+        } else {
+            return UIApplication.shared.windows.last
+        }
+    }
+
+    func updateRotateButtonVisibility(visible: Bool) {
+        DispatchQueue.main.async {
+            self.nativeRotateButton.isHidden = !visible
+            if visible {
+                if let topWindow = self.getTopWindow() {
+                    if self.nativeRotateButton.superview != topWindow {
+                        self.nativeRotateButton.removeFromSuperview()
+                        topWindow.addSubview(self.nativeRotateButton)
+                    }
+                    
+                    NSLayoutConstraint.deactivate(self.nativeRotateButton.constraints)
+                    self.nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        self.nativeRotateButton.trailingAnchor.constraint(equalTo: topWindow.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+                        self.nativeRotateButton.bottomAnchor.constraint(equalTo: topWindow.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+                        self.nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+                        self.nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+                    ])
+                    topWindow.bringSubviewToFront(self.nativeRotateButton)
+                }
+            } else {
+                self.nativeRotateButton.removeFromSuperview()
+            }
+        }
+    }
+
+    @objc func windowDidBecomeKey(_ notification: Notification) {
+        if !nativeRotateButton.isHidden {
+            updateRotateButtonVisibility(visible: true)
+        }
+    }
+
     // MARK: WKScriptMessageHandler
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        let frameKey = "\(message.frameInfo)"
+
         if message.name == "videoVisibility" {
             if let visible = message.body as? Bool {
-                DispatchQueue.main.async {
-                    NSLog("videoVisibility -> \(visible)")
-                    self.nativeRotateButton.isHidden = !visible
-                }
+                NSLog("videoVisibility [\(frameKey)] -> \(visible)")
+                frameVideoVisibilities[frameKey] = visible
+                
+                let anyVideoVisible = frameVideoVisibilities.values.contains(true)
+                updateRotateButtonVisibility(visible: anyVideoVisible)
             }
             return
         }
+
         if message.name == "fullscreenState" {
             if let fs = message.body as? Bool {
-                DispatchQueue.main.async {
-                    NSLog("fullscreenState -> \(fs)")
-                    self.isFullscreen = fs
-                    self.navigationController?.setNavigationBarHidden(fs, animated: true)
-                    self.setNeedsStatusBarAppearanceUpdate()
-                    if !fs {
-                        self.setOrientation(.portrait)
-                        self.targetOrientation = .all
-                        if #available(iOS 16.0, *) {
-                            self.setNeedsUpdateOfSupportedInterfaceOrientations()
-                            self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                NSLog("fullscreenState [\(frameKey)] -> \(fs)")
+                frameFullscreenStates[frameKey] = fs
+                
+                let anyFullscreen = frameFullscreenStates.values.contains(true)
+                
+                if self.isFullscreen != anyFullscreen {
+                    DispatchQueue.main.async {
+                        self.isFullscreen = anyFullscreen
+                        self.navigationController?.setNavigationBarHidden(anyFullscreen, animated: true)
+                        self.setNeedsStatusBarAppearanceUpdate()
+                        self.updateRotateButtonVisibility(visible: !self.nativeRotateButton.isHidden)
+                        
+                        if !anyFullscreen {
+                            self.setOrientation(.portrait)
+                            self.targetOrientation = .all
+                            if #available(iOS 16.0, *) {
+                                self.setNeedsUpdateOfSupportedInterfaceOrientations()
+                                self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                            }
                         }
                     }
                 }
@@ -213,10 +277,21 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         return isFullscreen
     }
 
+    private func isTrustedURL(_ url: URL) -> Bool {
+        guard let host = url.host else { return false }
+        return host.lowercased().contains("cineby")
+    }
+
     // MARK: WKNavigationDelegate
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if navigationAction.targetFrame == nil {
-            webView.load(navigationAction.request)
+            if let url = navigationAction.request.url {
+                if isTrustedURL(url) {
+                    webView.load(navigationAction.request)
+                } else {
+                    NSLog("Blocked popup navigation to untrusted site: \(url.absoluteString)")
+                }
+            }
             decisionHandler(.cancel)
             return
         }
@@ -226,12 +301,19 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     // MARK: WKUIDelegate
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if navigationAction.targetFrame == nil {
-            webView.load(navigationAction.request)
+            if let url = navigationAction.request.url {
+                if isTrustedURL(url) {
+                    webView.load(navigationAction.request)
+                } else {
+                    NSLog("Blocked popup window creation to untrusted site: \(url.absoluteString)")
+                }
+            }
         }
         return nil
     }
 
     deinit {
+        NotificationCenter.default.removeObserver(self)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "videoVisibility")
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "fullscreenState")
     }
