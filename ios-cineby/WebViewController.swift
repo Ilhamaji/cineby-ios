@@ -177,8 +177,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
                     .plyr__controls, 
                     .art-control, .art-controls, .art-mask, .art-state, .art-state-play, .art-play, .art-poster,
-                    div[class*="control" i], 
-                    div[class*="toolbar" i], 
+                    [class*="control" i], 
+                    [class*="toolbar" i], 
                     [class*="play-button" i], 
                     [class*="play-icon" i], 
                     [class*="play-btn" i], 
@@ -187,20 +187,39 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     [class*="big-play" i], 
                     [class*="display-icon" i],
                     [class*="display-btn" i],
-                    div[class*="overlay" i], 
-                    div[class*="mask" i], 
-                    div[class*="poster" i], 
-                    div[class*="preview" i],
-                    div[class*="spinner" i],
-                    div[class*="loading" i],
+                    [class*="overlay" i], 
+                    [class*="mask" i], 
+                    [class*="poster" i], 
+                    [class*="preview" i],
+                    [class*="spinner" i],
+                    [class*="loading" i],
                     [class*="player-controls" i],
-                    [class*="video-controls" i] {
+                    [class*="video-controls" i],
+                    [class*="button" i],
+                    [class*="btn" i],
+                    [class*="progress" i],
+                    [class*="volume" i],
+                    [class*="time" i],
+                    [class*="title" i],
+                    [class*="logo" i],
+                    [class*="menu" i],
+                    [class*="settings" i],
+                    [class*="setting" i] {
                         display: none !important;
                         opacity: 0 !important;
                         visibility: hidden !important;
                         pointer-events: none !important;
                     }
                   `;
+                  
+                  // Disable HTML5 native controls programmatically
+                  try {
+                    var videos = document.querySelectorAll('video');
+                    videos.forEach(function(v) {
+                      v.controls = false;
+                      v.removeAttribute('controls');
+                    });
+                  } catch (e) {}
                 } else {
                   if (style) {
                     style.remove();
