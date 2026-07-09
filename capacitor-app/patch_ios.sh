@@ -68,9 +68,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
 class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView!
-    private var rotationLocked = false
-    private var lockedOrientation: UIInterfaceOrientationMask = .all
-    private var lockButton: UIBarButtonItem!
+    private var nativeRotateButton: UIButton!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -78,32 +76,11 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         title = "Cineby"
 
         let contentController = WKUserContentController()
-        contentController.add(self, name: "rotate")
+        contentController.add(self, name: "videoVisibility")
 
         let js = """
         (function() {
           try {
-            var btn = document.getElementById('nativeRotateBtn');
-            if (!btn) {
-              btn = document.createElement('button');
-              btn.id = 'nativeRotateBtn';
-              btn.style.position = 'fixed';
-              btn.style.bottom = '20px';
-              btn.style.right = '20px';
-              btn.style.zIndex = 2147483647;
-              btn.style.padding = '10px 12px';
-              btn.style.background = 'rgba(0,0,0,0.6)';
-              btn.style.color = '#fff';
-              btn.style.border = 'none';
-              btn.style.borderRadius = '8px';
-              btn.style.fontSize = '14px';
-              btn.style.cursor = 'pointer';
-              btn.style.display = 'none';
-              btn.innerText = 'Rotate';
-              btn.onclick = function() { window.webkit.messageHandlers.rotate.postMessage('toggle'); };
-              document.body.appendChild(btn);
-            }
-
             function hasVisibleVideo() {
               var videos = Array.from(document.querySelectorAll('video'));
               return videos.some(function(video) {
@@ -116,17 +93,22 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
               });
             }
 
-            function updateButton() {
-              btn.style.display = hasVisibleVideo() ? 'block' : 'none';
+            var last = null;
+            function update() {
+              var v = hasVisibleVideo();
+              if (v !== last) {
+                try { window.webkit.messageHandlers.videoVisibility.postMessage(v); } catch(e){}
+                last = v;
+              }
             }
 
-            var observer = new MutationObserver(updateButton);
+            var observer = new MutationObserver(update);
             observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-            window.addEventListener('resize', updateButton);
-            window.addEventListener('scroll', updateButton);
-            document.addEventListener('fullscreenchange', updateButton);
-            document.addEventListener('webkitfullscreenchange', updateButton);
-            updateButton();
+            window.addEventListener('resize', update);
+            window.addEventListener('scroll', update);
+            document.addEventListener('fullscreenchange', update);
+            document.addEventListener('webkitfullscreenchange', update);
+            update();
           } catch (e) { }
         })();
         """
@@ -158,7 +140,35 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
             webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
         ])
 
+        nativeRotateButton = UIButton(type: .system)
+        nativeRotateButton.setTitle("Rotate", for: .normal)
+        nativeRotateButton.setTitleColor(.white, for: .normal)
+        nativeRotateButton.backgroundColor = UIColor(white: 0, alpha: 0.6)
+        nativeRotateButton.layer.cornerRadius = 8
+        nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
+        nativeRotateButton.isHidden = true
+        nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
+        view.addSubview(nativeRotateButton)
+
+        NSLayoutConstraint.activate([
+            nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+            nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+        ])
+
         loadWebApp()
+    }
+
+    @objc func nativeRotateTapped() {
+        let device = UIDevice.current
+        let isPortrait = device.orientation.isPortrait || device.orientation == .unknown
+        if isPortrait {
+            UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
+        } else {
+            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+        }
+        UIViewController.attemptRotationToDeviceOrientation()
     }
 
     private func loadWebApp() {
@@ -167,53 +177,17 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         }
     }
 
-    @objc private func handleRotateTap() {
-        toggleOrientation()
-    }
-
-    @objc private func handleLockTap() {
-        rotationLocked.toggle()
-        if rotationLocked {
-            let current = UIDevice.current.orientation
-            if current.isLandscape {
-                lockedOrientation = .landscape
-                setOrientation(.landscapeRight)
-            } else {
-                lockedOrientation = .portrait
-                setOrientation(.portrait)
-            }
-            lockButton.title = "Locked"
-        } else {
-            lockedOrientation = .all
-            lockButton.title = "Lock"
-        }
-        UIViewController.attemptRotationToDeviceOrientation()
-    }
-
-    private func toggleOrientation() {
-        let device = UIDevice.current
-        let isPortrait = device.orientation.isPortrait || device.orientation == .unknown
-        if isPortrait {
-            setOrientation(.landscapeRight)
-            if rotationLocked { lockedOrientation = .landscape }
-        } else {
-            setOrientation(.portrait)
-            if rotationLocked { lockedOrientation = .portrait }
-        }
-    }
-
-    private func setOrientation(_ orientation: UIInterfaceOrientation) {
-        UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
-    }
-
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return lockedOrientation
+        return .all
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if message.name == "rotate" {
-            toggleOrientation()
+        if message.name == "videoVisibility" {
+            if let visible = message.body as? Bool {
+                DispatchQueue.main.async {
+                    self.nativeRotateButton.isHidden = !visible
+                }
+            }
         }
     }
 
@@ -234,7 +208,7 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     deinit {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "rotate")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "videoVisibility")
     }
 }
 EOF
@@ -262,9 +236,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView!
-    private var rotationLocked = false
-    private var lockedOrientation: UIInterfaceOrientationMask = .all
-    private var lockButton: UIBarButtonItem!
+    private var nativeRotateButton: UIButton!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -272,32 +244,11 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         title = "Cineby"
 
         let contentController = WKUserContentController()
-        contentController.add(self, name: "rotate")
+        contentController.add(self, name: "videoVisibility")
 
         let js = """
         (function() {
           try {
-            var btn = document.getElementById('nativeRotateBtn');
-            if (!btn) {
-              btn = document.createElement('button');
-              btn.id = 'nativeRotateBtn';
-              btn.style.position = 'fixed';
-              btn.style.bottom = '20px';
-              btn.style.right = '20px';
-              btn.style.zIndex = 2147483647;
-              btn.style.padding = '10px 12px';
-              btn.style.background = 'rgba(0,0,0,0.6)';
-              btn.style.color = '#fff';
-              btn.style.border = 'none';
-              btn.style.borderRadius = '8px';
-              btn.style.fontSize = '14px';
-              btn.style.cursor = 'pointer';
-              btn.style.display = 'none';
-              btn.innerText = 'Rotate';
-              btn.onclick = function() { window.webkit.messageHandlers.rotate.postMessage('toggle'); };
-              document.body.appendChild(btn);
-            }
-
             function hasVisibleVideo() {
               var videos = Array.from(document.querySelectorAll('video'));
               return videos.some(function(video) {
@@ -310,17 +261,22 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
               });
             }
 
-            function updateButton() {
-              btn.style.display = hasVisibleVideo() ? 'block' : 'none';
+            var last = null;
+            function update() {
+              var v = hasVisibleVideo();
+              if (v !== last) {
+                try { window.webkit.messageHandlers.videoVisibility.postMessage(v); } catch(e){}
+                last = v;
+              }
             }
 
-            var observer = new MutationObserver(updateButton);
+            var observer = new MutationObserver(update);
             observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-            window.addEventListener('resize', updateButton);
-            window.addEventListener('scroll', updateButton);
-            document.addEventListener('fullscreenchange', updateButton);
-            document.addEventListener('webkitfullscreenchange', updateButton);
-            updateButton();
+            window.addEventListener('resize', update);
+            window.addEventListener('scroll', update);
+            document.addEventListener('fullscreenchange', update);
+            document.addEventListener('webkitfullscreenchange', update);
+            update();
           } catch (e) { }
         })();
         """
@@ -352,7 +308,35 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
             webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
         ])
 
+        nativeRotateButton = UIButton(type: .system)
+        nativeRotateButton.setTitle("Rotate", for: .normal)
+        nativeRotateButton.setTitleColor(.white, for: .normal)
+        nativeRotateButton.backgroundColor = UIColor(white: 0, alpha: 0.6)
+        nativeRotateButton.layer.cornerRadius = 8
+        nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
+        nativeRotateButton.isHidden = true
+        nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
+        view.addSubview(nativeRotateButton)
+
+        NSLayoutConstraint.activate([
+            nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+            nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+        ])
+
         loadWebApp()
+    }
+
+    @objc func nativeRotateTapped() {
+        let device = UIDevice.current
+        let isPortrait = device.orientation.isPortrait || device.orientation == .unknown
+        if isPortrait {
+            UIDevice.current.setValue(UIInterfaceOrientation.landscapeRight.rawValue, forKey: "orientation")
+        } else {
+            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
+        }
+        UIViewController.attemptRotationToDeviceOrientation()
     }
 
     private func loadWebApp() {
@@ -361,53 +345,17 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         }
     }
 
-    @objc private func handleRotateTap() {
-        toggleOrientation()
-    }
-
-    @objc private func handleLockTap() {
-        rotationLocked.toggle()
-        if rotationLocked {
-            let current = UIDevice.current.orientation
-            if current.isLandscape {
-                lockedOrientation = .landscape
-                setOrientation(.landscapeRight)
-            } else {
-                lockedOrientation = .portrait
-                setOrientation(.portrait)
-            }
-            lockButton.title = "Locked"
-        } else {
-            lockedOrientation = .all
-            lockButton.title = "Lock"
-        }
-        UIViewController.attemptRotationToDeviceOrientation()
-    }
-
-    private func toggleOrientation() {
-        let device = UIDevice.current
-        let isPortrait = device.orientation.isPortrait || device.orientation == .unknown
-        if isPortrait {
-            setOrientation(.landscapeRight)
-            if rotationLocked { lockedOrientation = .landscape }
-        } else {
-            setOrientation(.portrait)
-            if rotationLocked { lockedOrientation = .portrait }
-        }
-    }
-
-    private func setOrientation(_ orientation: UIInterfaceOrientation) {
-        UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
-    }
-
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return lockedOrientation
+        return .all
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if message.name == "rotate" {
-            toggleOrientation()
+        if message.name == "videoVisibility" {
+            if let visible = message.body as? Bool {
+                DispatchQueue.main.async {
+                    self.nativeRotateButton.isHidden = !visible
+                }
+            }
         }
     }
 
@@ -428,7 +376,7 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     deinit {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "rotate")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "videoVisibility")
     }
 }
 EOF
