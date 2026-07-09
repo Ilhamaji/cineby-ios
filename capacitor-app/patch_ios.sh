@@ -52,18 +52,62 @@ if [ ! -d "$SRC_DIR" ]; then
   exit 1
 fi
 
-echo "Copying source files from $SRC_DIR to $TARGET_DIR..."
-cp "$SRC_DIR/WebViewController.swift" "$TARGET_DIR/WebViewController.swift"
-cp "$SRC_DIR/OrientationNavigationController.swift" "$TARGET_DIR/OrientationNavigationController.swift"
+# Clean up any previously copied standalone files to prevent duplicate definitions in compile
+rm -f "$TARGET_DIR/WebViewController.swift"
+rm -f "$TARGET_DIR/OrientationNavigationController.swift"
+
+echo "Merging source files into main delegate files..."
 
 if [ -f "$TARGET_DIR/SceneDelegate.swift" ]; then
-  echo "Target project uses SceneDelegate. Copying SceneDelegate.swift..."
-  cp "$SRC_DIR/SceneDelegate.swift" "$TARGET_DIR/SceneDelegate.swift"
-  cp "$SRC_DIR/AppDelegate.swift" "$TARGET_DIR/AppDelegate.swift"
-else
-  echo "Target project uses AppDelegate-only. Modifying AppDelegate.swift..."
+  echo "Target project uses SceneDelegate. Merging into SceneDelegate.swift..."
+  
+  # Copy clean SceneDelegate.swift template and append WebViewController and OrientationNavigationController
+  cat > "$TARGET_DIR/SceneDelegate.swift" <<'EOF'
+import UIKit
+import WebKit
+
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let windowScene = (scene as? UIWindowScene) else { return }
+        let window = UIWindow(windowScene: windowScene)
+        let navigationController = OrientationNavigationController(rootViewController: WebViewController())
+        window.rootViewController = navigationController
+        self.window = window
+        window.makeKeyAndVisible()
+    }
+}
+EOF
+
+  grep -v '^import ' "$SRC_DIR/WebViewController.swift" >> "$TARGET_DIR/SceneDelegate.swift"
+  grep -v '^import ' "$SRC_DIR/OrientationNavigationController.swift" >> "$TARGET_DIR/SceneDelegate.swift"
+
+  # Copy clean AppDelegate.swift template (no window logic needed since SceneDelegate is active)
   cat > "$TARGET_DIR/AppDelegate.swift" <<'EOF'
 import UIKit
+
+@UIApplicationMain
+class AppDelegate: UIResponder, UIApplicationDelegate {
+
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        return true
+    }
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return window?.rootViewController?.supportedInterfaceOrientations ?? .all
+    }
+}
+EOF
+
+else
+  echo "Target project uses AppDelegate-only. Merging into AppDelegate.swift..."
+  
+  # Copy clean AppDelegate.swift template and append WebViewController and OrientationNavigationController
+  cat > "$TARGET_DIR/AppDelegate.swift" <<'EOF'
+import UIKit
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -84,6 +128,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 }
 EOF
+
+  grep -v '^import ' "$SRC_DIR/WebViewController.swift" >> "$TARGET_DIR/AppDelegate.swift"
+  grep -v '^import ' "$SRC_DIR/OrientationNavigationController.swift" >> "$TARGET_DIR/AppDelegate.swift"
 fi
 
 echo "Successfully patched iOS project."
