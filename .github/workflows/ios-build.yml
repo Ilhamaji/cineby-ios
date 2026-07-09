@@ -1,0 +1,54 @@
+name: iOS Build & Upload
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build-ios:
+    name: Build iOS (.ipa) artifact for Sideloadly
+    runs-on: macos-latest
+    env:
+      NODE_OPTIONS: --max_old_space_size=4096
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then npm ci; fi
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods -v 1.12.1 || true
+
+      - name: Ensure Capacitor iOS platform
+        run: |
+          npx cap sync ios
+
+      - name: Install fastlane
+        run: |
+          sudo gem install fastlane -NV
+
+      - name: Run Fastlane build (artifact)
+        env:
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+        run: |
+          cd ios/App
+          fastlane ios build_artifact
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ios-ipa
+          path: ios/artifacts/**/*.ipa

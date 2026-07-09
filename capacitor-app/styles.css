@@ -1,0 +1,29 @@
+body {
+  font-family: -apple-system, Roboto, Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f7f7f8;
+  color: #111;
+}
+header h1 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+}
+.controls {
+  margin: 12px 0;
+  display: flex;
+  gap: 8px;
+}
+button {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #007aff;
+  color: white;
+  font-weight: 600;
+}
+.note {
+  margin-top: 10px;
+  color: #666;
+  font-size: 13px;
+}

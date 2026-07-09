@@ -1,0 +1,31 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Fetch certificates, build and upload to TestFlight"
+  lane :build_and_upload do
+    # Use match to fetch provisioning profiles and certificates. Configure MATCH_GIT_URL and MATCH_PASSWORD as repo secrets.
+    match(type: "appstore", readonly: true)
+
+    build_app(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store"
+    )
+
+    upload_to_testflight
+  end
+
+  desc "Build signed .ipa artifact for sideloading (ad-hoc)"
+  lane :build_artifact do
+    match(type: "adhoc", readonly: true)
+
+    build_app(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "ad-hoc",
+      output_directory: "../artifacts"
+    )
+  end
+end

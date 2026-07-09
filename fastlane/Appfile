@@ -1,0 +1,2 @@
+app_identifier("com.example.cineby") # Replace with your app bundle id
+apple_id("your@apple.id@example.com") # Replace with your Apple ID

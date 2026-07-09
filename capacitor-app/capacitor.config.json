@@ -1,0 +1,10 @@
+{
+  "appId": "com.example.cineby",
+  "appName": "Cineby",
+  "webDir": "./",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://cineby.at",
+    "cleartext": false
+  }
+}
