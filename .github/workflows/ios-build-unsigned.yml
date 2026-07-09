@@ -43,22 +43,24 @@ jobs:
             npm install @capacitor/ios@latest --no-audit --no-fund
             npx --yes @capacitor/cli add ios
           fi
+          npx --yes @capacitor/cli copy ios
           find . -name Podfile | while read -r podfile; do
             echo "Patching $podfile"
-            perl -pi -e 's/^platform :ios, .*/platform :ios, "18.0"/' "$podfile"
+            perl -pi -e 's/^platform :ios, .*/platform :ios, "26.0"/' "$podfile"
             if ! grep -q '^platform :ios' "$podfile"; then
-              sed -i '' '1iplatform :ios, "18.0"' "$podfile"
+              sed -i '' '1iplatform :ios, "26.0"' "$podfile"
             fi
           done
           find . -name project.pbxproj | while read -r pbxfile; do
             echo "Patching pbxproj $pbxfile"
-            perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = \d+\.\d+/IPHONEOS_DEPLOYMENT_TARGET = 18.0/g' "$pbxfile"
+            perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = \d+\.\d+/IPHONEOS_DEPLOYMENT_TARGET = 26.0/g' "$pbxfile"
           done
           find . -name "*.xcconfig" | while read -r xcfile; do
             echo "Patching xcconfig $xcfile"
-            perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 18.0/' "$xcfile"
+            perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 26.0/' "$xcfile"
           done
-          npx --yes @capacitor/cli sync ios
+          cd ios/App
+          pod install --repo-update
 
       - name: Build unsigned .app archive
         working-directory: ios/App
