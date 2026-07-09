@@ -389,7 +389,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         
         NSLayoutConstraint.activate([
             switchWebButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            switchWebButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            switchWebButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 80),
             switchWebButton.widthAnchor.constraint(equalToConstant: 50),
             switchWebButton.heightAnchor.constraint(equalToConstant: 50)
         ])
