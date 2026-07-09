@@ -63,41 +63,54 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         let earlyJS = """
         (function() {
           try {
-            // Intercept double-taps to prevent players from automatically skipping 10s
+            // Intercept double-taps to prevent players from automatically skipping
             var lastTouchTime = 0;
             document.addEventListener('touchstart', function(e) {
               var target = e.target;
-              if (!target) return;
-              var isVideoOrPlayer = target.nodeName === 'VIDEO' || target.closest('video') || 
-                                    target.closest('.jwplayer') || target.closest('.plyr') || 
-                                    target.closest('.artplayer') || target.closest('.video-js') ||
-                                    target.closest('.dplayer');
-                                    
-              if (isVideoOrPlayer) {
-                var now = Date.now();
-                var diff = now - lastTouchTime;
-                if (diff > 0 && diff < 350) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  lastTouchTime = 0;
-                  return;
-                }
-                lastTouchTime = now;
+              if (target && (target.nodeName === 'BUTTON' || target.nodeName === 'INPUT' || target.nodeName === 'SELECT' || target.closest('button') || target.closest('a'))) {
+                return; // Let buttons and links function normally
               }
+              var now = Date.now();
+              var diff = now - lastTouchTime;
+              if (diff > 0 && diff < 350) {
+                e.preventDefault();
+                e.stopPropagation();
+                lastTouchTime = 0;
+                return;
+              }
+              lastTouchTime = now;
             }, { passive: false, capture: true });
 
             document.addEventListener('dblclick', function(e) {
               var target = e.target;
+              if (target && (target.nodeName === 'BUTTON' || target.nodeName === 'INPUT' || target.nodeName === 'SELECT' || target.closest('button') || target.closest('a'))) {
+                return;
+              }
+              e.preventDefault();
+              e.stopPropagation();
+            }, true);
+
+            // Prevent swipe-to-seek gestures on video player area
+            document.addEventListener('touchmove', function(e) {
+              var target = e.target;
               if (!target) return;
-              var isVideoOrPlayer = target.nodeName === 'VIDEO' || target.closest('video') || 
-                                    target.closest('.jwplayer') || target.closest('.plyr') || 
-                                    target.closest('.artplayer') || target.closest('.video-js') ||
-                                    target.closest('.dplayer');
-              if (isVideoOrPlayer) {
+              var isPlayerElement = target.nodeName === 'VIDEO' || 
+                                    (target.closest && (
+                                      target.closest('.jwplayer') || 
+                                      target.closest('.plyr') || 
+                                      target.closest('.artplayer') || 
+                                      target.closest('.video-js') ||
+                                      target.closest('.dplayer') ||
+                                      target.closest('.player-container') ||
+                                      target.closest('.video-player')
+                                    ));
+              if (isPlayerElement) {
+                if (target.nodeName === 'INPUT' && target.type === 'range') return;
+                if (target.classList && (target.classList.contains('jw-slider-container') || target.classList.contains('plyr__progress'))) return;
                 e.preventDefault();
                 e.stopPropagation();
               }
-            }, true);
+            }, { passive: false, capture: true });
 
             // Deteksi apakah ini situs Cineby — jika ya, biarkan native controls
             var isCineby = window.location.hostname.includes('cineby') || (document.referrer && document.referrer.includes('cineby'));
@@ -339,6 +352,15 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             if (!isCineby) {
               // Inject custom Mstream dedicated playback controls — HANYA untuk non-Cineby (Nimegami, dll)
               function injectMstreamControls() {
+                var isCinebyCheck = window.mstreamActiveSite === 'cineby' || 
+                                    window.location.hostname.includes('cineby') || 
+                                    (document.referrer && document.referrer.includes('cineby'));
+                if (isCinebyCheck) {
+                  var overlay = document.getElementById('mstream-controls-overlay');
+                  if (overlay) overlay.remove();
+                  return;
+                }
+
                 var video = document.querySelector('video');
                 if (!video) return;
 
@@ -740,6 +762,10 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
 
             // Listen for messages from child frames
             window.addEventListener('message', function(event) {
+              if (event.data && event.data.type === 'mstreamActiveSite') {
+                window.mstreamActiveSite = event.data.site;
+              }
+
               if (event.data && event.data.type === 'iAmVideoPlayer') {
                 var iframes = document.querySelectorAll('iframe');
                 for (var i = 0; i < iframes.length; i++) {
