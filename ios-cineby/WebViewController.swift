@@ -1,18 +1,27 @@
 import UIKit
 import WebKit
 
-class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
+class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView!
+    private var rotationLocked: Bool = false
+    private var lockedOrientation: UIInterfaceOrientationMask = .all
+    private var lockButton: UIBarButtonItem!
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
+        title = "Cineby"
 
+        setupWebView()
+        setupNavigationItems()
+        loadWebApp()
+    }
+
+    func setupWebView() {
         let contentController = WKUserContentController()
         contentController.add(self, name: "rotate")
         contentController.add(self, name: "native")
 
-        // Inject JS: add Rotate + Fullscreen buttons and wire to native handlers
         let js = """
         (function() {
           try {
@@ -33,33 +42,6 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
               btn.onclick = function(){ window.webkit.messageHandlers.rotate.postMessage('toggle'); };
               document.body.appendChild(btn);
             }
-
-            if (!document.getElementById('nativeFullBtn')){
-              var fbtn = document.createElement('button');
-              fbtn.id='nativeFullBtn';
-              fbtn.style.position='fixed';
-              fbtn.style.bottom='20px';
-              fbtn.style.left='20px';
-              fbtn.style.zIndex=2147483647;
-              fbtn.style.padding='10px 12px';
-              fbtn.style.background='rgba(0,0,0,0.6)';
-              fbtn.style.color='#fff';
-              fbtn.style.border='none';
-              fbtn.style.borderRadius='8px';
-              fbtn.style.fontSize='14px';
-              fbtn.innerText='Fullscreen';
-              fbtn.onclick = function(){ window.webkit.messageHandlers.native.postMessage('fullscreen'); };
-              document.body.appendChild(fbtn);
-            }
-
-            // Try to add click listener on video elements to show our controls when user interacts
-            document.addEventListener('click', function(){
-              var v = document.querySelector('video');
-              if(v){
-                // ensure native button exists
-                // nothing more for now
-              }
-            }, true);
           } catch(e) { }
         })();
         """
@@ -72,33 +54,57 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         if #available(iOS 10.0, *) {
             config.mediaTypesRequiringUserActionForPlayback = []
         }
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.userContentController = contentController
 
-        webView = WKWebView(frame: view.bounds, configuration: config)
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
+        webView.uiDelegate = self
+        webView.allowsBackForwardNavigationGestures = true
         view.addSubview(webView)
 
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+    }
+
+    func setupNavigationItems() {
+        let rotateButton = UIBarButtonItem(title: "Rotate", style: .plain, target: self, action: #selector(handleRotateTap))
+        lockButton = UIBarButtonItem(title: "Lock", style: .plain, target: self, action: #selector(handleLockTap))
+        navigationItem.rightBarButtonItems = [lockButton, rotateButton]
+    }
+
+    func loadWebApp() {
         if let url = URL(string: "https://cineby.at") {
             webView.load(URLRequest(url: url))
         }
     }
 
-    // MARK: WKScriptMessageHandler
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        if message.name == "rotate" {
-            toggleOrientation()
-            return
-        }
+    @objc func handleRotateTap() {
+        toggleOrientation()
+    }
 
-        if message.name == "native" {
-            if let body = message.body as? String, body == "fullscreen" {
-                // ensure orientation first, then request fullscreen on the first video element
+    @objc func handleLockTap() {
+        rotationLocked.toggle()
+        if rotationLocked {
+            let deviceOrientation = UIDevice.current.orientation
+            if deviceOrientation.isLandscape {
+                lockedOrientation = .landscape
                 setOrientation(.landscapeRight)
-                let js = "(function(){var v=document.querySelector('video'); if(v){ if(v.requestFullscreen) v.requestFullscreen(); else if(v.webkitEnterFullScreen) v.webkitEnterFullScreen(); }})()"
-                webView.evaluateJavaScript(js, completionHandler: nil)
+            } else {
+                lockedOrientation = .portrait
+                setOrientation(.portrait)
             }
+            lockButton.title = "Locked"
+        } else {
+            lockedOrientation = .all
+            lockButton.title = "Lock"
         }
+        UIViewController.attemptRotationToDeviceOrientation()
     }
 
     func toggleOrientation() {
@@ -106,8 +112,14 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         let isPortrait = device.orientation.isPortrait || device.orientation == .unknown
         if isPortrait {
             setOrientation(.landscapeRight)
+            if rotationLocked {
+                lockedOrientation = .landscape
+            }
         } else {
             setOrientation(.portrait)
+            if rotationLocked {
+                lockedOrientation = .portrait
+            }
         }
     }
 
@@ -117,7 +129,32 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return .all
+        return lockedOrientation
+    }
+
+    // MARK: WKScriptMessageHandler
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "rotate" {
+            toggleOrientation()
+        }
+    }
+
+    // MARK: WKNavigationDelegate
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if navigationAction.targetFrame == nil {
+            webView.load(navigationAction.request)
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(.allow)
+    }
+
+    // MARK: WKUIDelegate
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if navigationAction.targetFrame == nil {
+            webView.load(navigationAction.request)
+        }
+        return nil
     }
 
     deinit {
