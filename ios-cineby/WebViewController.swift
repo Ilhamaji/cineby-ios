@@ -38,6 +38,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     private var webViewConstraints: [NSLayoutConstraint] = []
     private var rotateButtonConstraints: [NSLayoutConstraint] = []
     private var lockButtonConstraints: [NSLayoutConstraint] = []
+    private var switchButtonTopConstraint: NSLayoutConstraint!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -347,12 +348,14 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     
     @objc private func cinebyCardTapped() {
         activeSite = .cineby
+        adjustButtonConstraintsForActiveSite()
         loadWebApp()
         animateLandingOut()
     }
     
     @objc private func nimegamiCardTapped() {
         activeSite = .nimegami
+        adjustButtonConstraintsForActiveSite()
         loadWebApp()
         animateLandingOut()
     }
@@ -387,9 +390,10 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         view.addSubview(switchWebButton)
         view.bringSubviewToFront(switchWebButton)
         
+        switchButtonTopConstraint = switchWebButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20)
         NSLayoutConstraint.activate([
             switchWebButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            switchWebButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 80),
+            switchButtonTopConstraint,
             switchWebButton.widthAnchor.constraint(equalToConstant: 50),
             switchWebButton.heightAnchor.constraint(equalToConstant: 50)
         ])
@@ -553,8 +557,17 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             } else {
                 self.activeSite = .cineby
             }
+            self.adjustButtonConstraintsForActiveSite()
             self.loadWebApp()
         }, completion: nil)
+    }
+
+    private func adjustButtonConstraintsForActiveSite() {
+        let targetConstant: CGFloat = (activeSite == .nimegami) ? 80 : 20
+        UIView.animate(withDuration: 0.3) {
+            self.switchButtonTopConstraint.constant = targetConstant
+            self.view.layoutIfNeeded()
+        }
     }
 
     @objc func nativeLockTapped() {
