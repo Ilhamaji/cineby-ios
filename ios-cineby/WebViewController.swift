@@ -5,6 +5,7 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     var webView: WKWebView!
     private var nativeRotateButton: UIButton!
     private var isFullscreen = false
+    private var targetOrientation: UIInterfaceOrientationMask = .all
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -81,10 +82,10 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         view.addSubview(webView)
 
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor)
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
     }
 
@@ -138,12 +139,38 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     func setOrientation(_ orientation: UIInterfaceOrientation) {
-        UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
-        UIViewController.attemptRotationToDeviceOrientation()
+        let mask: UIInterfaceOrientationMask
+        switch orientation {
+        case .portrait:
+            mask = .portrait
+        case .landscapeLeft:
+            mask = .landscapeLeft
+        case .landscapeRight:
+            mask = .landscapeRight
+        case .portraitUpsideDown:
+            mask = .portraitUpsideDown
+        default:
+            mask = .all
+        }
+        
+        self.targetOrientation = mask
+        
+        if #available(iOS 16.0, *) {
+            self.setNeedsUpdateOfSupportedInterfaceOrientations()
+            self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            guard let windowScene = self.view.window?.windowScene else { return }
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
+            windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                NSLog("Failed to change orientation: \(error.localizedDescription)")
+            }
+        } else {
+            UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return .all
+        return targetOrientation
     }
 
     override var shouldAutorotate: Bool {
@@ -166,7 +193,16 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
                 DispatchQueue.main.async {
                     NSLog("fullscreenState -> \(fs)")
                     self.isFullscreen = fs
+                    self.navigationController?.setNavigationBarHidden(fs, animated: true)
                     self.setNeedsStatusBarAppearanceUpdate()
+                    if !fs {
+                        self.setOrientation(.portrait)
+                        self.targetOrientation = .all
+                        if #available(iOS 16.0, *) {
+                            self.setNeedsUpdateOfSupportedInterfaceOrientations()
+                            self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                        }
+                    }
                 }
             }
             return
