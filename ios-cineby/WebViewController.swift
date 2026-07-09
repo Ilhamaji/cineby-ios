@@ -361,65 +361,131 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
               document.addEventListener('click', handleGlobalTouch, {capture: true});
             }
 
-            // Persistently hide default player controls, timelines, and timestamps
-            // Uses specific named selectors only — avoids wildcards that can hide video
-            // rendering layers or our own dedicated overlay.
+            // Persistently hide default player controls, timelines, and timestamps.
+            // Covers all major player libraries and common class patterns.
+            var HIDE_CONTROLS_CSS = `
+              /* JW Player */
+              .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
+              .jw-nextup-container, .jw-display-icon-container,
+              .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
+              .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
+              /* Video.js */
+              .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
+              /* Plyr */
+              .plyr__controls, .plyr__play-large,
+              /* Artplayer */
+              .art-control, .art-controls, .art-bottom, .art-progress,
+              .art-state, .art-state-play, .art-play, .art-poster,
+              .art-layer-mask, .art-layer, .art-layers, .art-notice,
+              /* DPlayer */
+              .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
+              /* Shaka Player */
+              .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
+              /* HLS.js / Flowplayer */
+              .fp-controls, .fp-ui, .fp-elapsed, .fp-duration,
+              /* Cineby / Generic */
+              .cb-controlbar, .cb-control, .cb-controls,
+              .player-controlbar, .player-bottom, .player-ui, .player-controls,
+              .video-controlbar, .video-bottombar, .video-controls,
+              [class*='controlbar']:not(#mstream-controls-overlay),
+              [class*='control-bar']:not(#mstream-controls-overlay),
+              [class*='playerbar']:not(#mstream-controls-overlay) {
+                  display: none !important;
+                  opacity: 0 !important;
+                  visibility: hidden !important;
+                  pointer-events: none !important;
+              }
+              /* Always keep our dedicated controls fully interactive */
+              #mstream-controls-overlay {
+                  display: flex !important;
+                  visibility: visible !important;
+                  pointer-events: auto !important;
+              }
+              #mstream-controls-overlay * {
+                  display: flex !important;
+                  visibility: visible !important;
+                  pointer-events: auto !important;
+              }
+              #mstream-controls-overlay[style*="opacity: 0"],
+              #mstream-controls-overlay[style*="opacity:0"] {
+                  opacity: 0 !important;
+                  pointer-events: none !important;
+              }
+            `;
+
             function hideDefaultControls() {
+              // Inject persistent CSS
               var style = document.getElementById('mstream-default-controls-hide-override');
               if (!style) {
                 style = document.createElement('style');
                 style.id = 'mstream-default-controls-hide-override';
-                document.head.appendChild(style);
-                style.innerHTML = `
-                  /* JW Player */
-                  .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
-                  .jw-nextup-container, .jw-display-icon-container,
-                  .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
-                  .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
-                  /* Video.js */
-                  .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
-                  /* Plyr */
-                  .plyr__controls,
-                  /* Artplayer */
-                  .art-control, .art-controls, .art-bottom, .art-progress,
-                  .art-state, .art-state-play, .art-play, .art-poster,
-                  /* DPlayer */
-                  .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
-                  /* Shaka Player */
-                  .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
-                  /* Cineby-specific: known controlbar class names */
-                  .cb-controlbar, .cb-control, .cb-controls,
-                  .player-controlbar, .player-bottom, .player-ui,
-                  .video-controlbar, .video-bottombar {
-                      display: none !important;
-                      opacity: 0 !important;
-                      visibility: hidden !important;
-                      pointer-events: none !important;
-                  }
-                  /* Always keep our dedicated controls fully interactive */
-                  #mstream-controls-overlay,
-                  #mstream-controls-overlay * {
-                      display: flex !important;
-                      opacity: 1 !important;
-                      visibility: visible !important;
-                      pointer-events: auto !important;
-                  }
-                  #mstream-controls-overlay[style*="opacity: 0"],
-                  #mstream-controls-overlay[style*="opacity:0"] {
-                      opacity: 0 !important;
-                      pointer-events: none !important;
-                  }
-                `;
+                (document.head || document.documentElement).appendChild(style);
               }
+              style.innerHTML = HIDE_CONTROLS_CSS;
+
+              // Remove controls attribute and property from all videos
               try {
                 var videos = document.querySelectorAll('video');
                 for (var i = 0; i < videos.length; i++) {
-                  videos[i].controls = false;
-                  videos[i].removeAttribute('controls');
+                  var v = videos[i];
+                  v.controls = false;
+                  v.removeAttribute('controls');
+
+                  // Override setAttribute to block future re-adds of 'controls'
+                  if (!v.__mstreamOverridden) {
+                    v.__mstreamOverridden = true;
+                    var origSetAttr = v.setAttribute.bind(v);
+                    v.setAttribute = function(name, value) {
+                      if (name === 'controls') return;
+                      origSetAttr(name, value);
+                    };
+                    Object.defineProperty(v, 'controls', {
+                      get: function() { return false; },
+                      set: function() {},
+                      configurable: true
+                    });
+                  }
+                }
+              } catch (e) {}
+
+              // Also inject the same CSS into all accessible iframes
+              try {
+                var iframes = document.querySelectorAll('iframe');
+                for (var fi = 0; fi < iframes.length; fi++) {
+                  try {
+                    var iDoc = iframes[fi].contentDocument || iframes[fi].contentWindow.document;
+                    if (!iDoc) continue;
+                    var iStyle = iDoc.getElementById('mstream-default-controls-hide-override');
+                    if (!iStyle) {
+                      iStyle = iDoc.createElement('style');
+                      iStyle.id = 'mstream-default-controls-hide-override';
+                      (iDoc.head || iDoc.documentElement).appendChild(iStyle);
+                    }
+                    iStyle.innerHTML = HIDE_CONTROLS_CSS;
+                    var iVideos = iDoc.querySelectorAll('video');
+                    for (var vi = 0; vi < iVideos.length; vi++) {
+                      var iv = iVideos[vi];
+                      iv.controls = false;
+                      iv.removeAttribute('controls');
+                      if (!iv.__mstreamOverridden) {
+                        iv.__mstreamOverridden = true;
+                        var origSetAttrI = iv.setAttribute.bind(iv);
+                        iv.setAttribute = function(name, value) {
+                          if (name === 'controls') return;
+                          origSetAttrI(name, value);
+                        };
+                        Object.defineProperty(iv, 'controls', {
+                          get: function() { return false; },
+                          set: function() {},
+                          configurable: true
+                        });
+                      }
+                    }
+                  } catch (iframeErr) {}
                 }
               } catch (e) {}
             }
-            setInterval(hideDefaultControls, 500);
+            setInterval(hideDefaultControls, 300);
             hideDefaultControls();
 
             // Notify native side of frame loading to check/enforce lock state
