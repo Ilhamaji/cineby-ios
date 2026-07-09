@@ -3,9 +3,13 @@ import WebKit
 
 class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView!
+    private var containerView: UIView!
     private var nativeRotateButton: UIButton!
     private var isFullscreen = false
-    private var targetOrientation: UIInterfaceOrientationMask = .all
+    private var isLandscapeRotated = false
+
+    private var webViewConstraints: [NSLayoutConstraint] = []
+    private var rotateButtonConstraints: [NSLayoutConstraint] = []
 
     private var frameVideoVisibilities: [String: Bool] = [:]
     private var frameFullscreenStates: [String: Bool] = [:]
@@ -18,8 +22,6 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         setupWebView()
         setupNativeRotateButton()
         loadWebApp()
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey(_:)), name: UIWindow.didBecomeKeyNotification, object: nil)
     }
 
     func setupWebView() {
@@ -36,6 +38,9 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
               HTMLVideoElement.prototype.webkitEnterFullScreen = undefined;
               HTMLVideoElement.prototype.webkitRequestFullscreen = undefined;
               HTMLVideoElement.prototype.webkitRequestFullScreen = undefined;
+              Element.prototype.requestFullscreen = undefined;
+              Element.prototype.webkitRequestFullscreen = undefined;
+              Element.prototype.webkitRequestFullScreen = undefined;
             } catch (e) {}
 
             function hasVisibleVideo() {
@@ -84,6 +89,12 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
             document.addEventListener('fullscreenchange', function(){ update(); postFullscreen(); });
             document.addEventListener('webkitfullscreenchange', function(){ update(); postFullscreen(); });
             
+            // Periodically check/force in case content is dynamic
+            setInterval(function() {
+                update();
+                forcePlaysInline();
+            }, 1000);
+
             update();
             forcePlaysInline();
           } catch (e) { }
@@ -101,6 +112,18 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.userContentController = contentController
 
+        // Initialize containerView
+        containerView = UIView()
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(containerView)
+
+        NSLayoutConstraint.activate([
+            containerView.topAnchor.constraint(equalTo: view.topAnchor),
+            containerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            containerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            containerView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+
         webView = WKWebView(frame: .zero, configuration: config)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.navigationDelegate = self
@@ -108,14 +131,15 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.contentInsetAdjustmentBehavior = .always
         webView.backgroundColor = .systemBackground
-        view.addSubview(webView)
+        containerView.addSubview(webView)
 
-        NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ])
+        webViewConstraints = [
+            webView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor)
+        ]
+        NSLayoutConstraint.activate(webViewConstraints)
     }
 
     func setupNativeRotateButton() {
@@ -127,6 +151,34 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
         nativeRotateButton.isHidden = true
         nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
+        
+        view.addSubview(nativeRotateButton)
+        view.bringSubviewToFront(nativeRotateButton)
+        
+        updateRotateButtonConstraints(landscape: false)
+    }
+
+    private func updateRotateButtonConstraints(landscape: Bool) {
+        NSLayoutConstraint.deactivate(rotateButtonConstraints)
+        
+        if landscape {
+            // Physical bottom-left safe area of screen acts as the visual bottom-right in landscape mode
+            rotateButtonConstraints = [
+                nativeRotateButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+                nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+                nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+                nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+            ]
+        } else {
+            // Physical bottom-right safe area
+            rotateButtonConstraints = [
+                nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+                nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+                nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
+                nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+            ]
+        }
+        NSLayoutConstraint.activate(rotateButtonConstraints)
     }
 
     func loadWebApp() {
@@ -141,111 +193,56 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     func toggleOrientation() {
-        let isPortrait: Bool
-        if let scene = view.window?.windowScene {
-            isPortrait = scene.interfaceOrientation.isPortrait
-        } else {
-            let device = UIDevice.current
-            isPortrait = device.orientation.isPortrait || device.orientation == .unknown
-        }
-        NSLog("toggleOrientation: isPortrait=\(isPortrait)")
-        if isPortrait {
-            setOrientation(.landscapeRight)
-        } else {
-            setOrientation(.portrait)
-        }
+        setOrientationVisual(!isLandscapeRotated)
     }
 
-    private func getActiveWindowScene() -> UIWindowScene? {
-        if #available(iOS 13.0, *) {
-            return UIApplication.shared.connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
-        }
-        return nil
-    }
-
-    func setOrientation(_ orientation: UIInterfaceOrientation) {
-        let mask: UIInterfaceOrientationMask
-        switch orientation {
-        case .portrait:
-            mask = .portrait
-        case .landscapeLeft:
-            mask = .landscapeLeft
-        case .landscapeRight:
-            mask = .landscapeRight
-        case .portraitUpsideDown:
-            mask = .portraitUpsideDown
-        default:
-            mask = .all
-        }
+    func setOrientationVisual(_ landscape: Bool) {
+        self.isLandscapeRotated = landscape
         
-        self.targetOrientation = mask
-        
-        if #available(iOS 16.0, *) {
-            self.setNeedsUpdateOfSupportedInterfaceOrientations()
-            self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            
-            let scene = self.getActiveWindowScene() ?? self.view.window?.windowScene
-            guard let windowScene = scene else { return }
-            
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                NSLog("Failed to change orientation: \(error.localizedDescription)")
+        UIView.animate(withDuration: 0.3) {
+            if landscape {
+                // Deactivate normal layout constraints
+                NSLayoutConstraint.deactivate(self.webViewConstraints)
+                self.webView.translatesAutoresizingMaskIntoConstraints = true
+                
+                // Apply a visual 90 degrees rotation
+                self.webView.transform = CGAffineTransform(rotationAngle: .pi / 2)
+                
+                // Swap bounds width/height to make it occupy full screen horizontally
+                let containerSize = self.containerView.bounds.size
+                self.webView.bounds = CGRect(x: 0, y: 0, width: containerSize.height, height: containerSize.width)
+                self.webView.center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
+                
+                // Also rotate the rotate button itself so the text matches user horizontal holding
+                self.nativeRotateButton.transform = CGAffineTransform(rotationAngle: .pi / 2)
+            } else {
+                // Reset transform
+                self.webView.transform = .identity
+                self.nativeRotateButton.transform = .identity
+                
+                // Re-enable Auto Layout constraints
+                self.webView.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate(self.webViewConstraints)
             }
-        } else {
-            UIDevice.current.setValue(orientation.rawValue, forKey: "orientation")
-            UIViewController.attemptRotationToDeviceOrientation()
+            
+            // Toggle bar and status bar appearances
+            self.navigationController?.setNavigationBarHidden(landscape, animated: true)
+            self.isFullscreen = landscape
+            self.setNeedsStatusBarAppearanceUpdate()
+            
+            // Adjust button placement
+            self.updateRotateButtonConstraints(landscape: landscape)
+            
+            self.view.layoutIfNeeded()
         }
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return targetOrientation
+        return .portrait // The view controller physically stays in portrait orientation
     }
 
     override var shouldAutorotate: Bool {
-        return true
-    }
-
-    private func getTopWindow() -> UIWindow? {
-        if #available(iOS 13.0, *) {
-            let activeScene = UIApplication.shared.connectedScenes
-                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
-            return activeScene?.windows.last ?? UIApplication.shared.windows.last
-        } else {
-            return UIApplication.shared.windows.last
-        }
-    }
-
-    func updateRotateButtonVisibility(visible: Bool) {
-        DispatchQueue.main.async {
-            self.nativeRotateButton.isHidden = !visible
-            if visible {
-                if let topWindow = self.getTopWindow() {
-                    if self.nativeRotateButton.superview != topWindow {
-                        self.nativeRotateButton.removeFromSuperview()
-                        topWindow.addSubview(self.nativeRotateButton)
-                    }
-                    
-                    NSLayoutConstraint.deactivate(self.nativeRotateButton.constraints)
-                    self.nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
-                    NSLayoutConstraint.activate([
-                        self.nativeRotateButton.trailingAnchor.constraint(equalTo: topWindow.safeAreaLayoutGuide.trailingAnchor, constant: -16),
-                        self.nativeRotateButton.bottomAnchor.constraint(equalTo: topWindow.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-                        self.nativeRotateButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 72),
-                        self.nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
-                    ])
-                    topWindow.bringSubviewToFront(self.nativeRotateButton)
-                }
-            } else {
-                self.nativeRotateButton.removeFromSuperview()
-            }
-        }
-    }
-
-    @objc func windowDidBecomeKey(_ notification: Notification) {
-        if !nativeRotateButton.isHidden {
-            updateRotateButtonVisibility(visible: true)
-        }
+        return false // Do not rotate physically
     }
 
     // MARK: WKScriptMessageHandler
@@ -258,7 +255,9 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
                 frameVideoVisibilities[frameKey] = visible
                 
                 let anyVideoVisible = frameVideoVisibilities.values.contains(true)
-                updateRotateButtonVisibility(visible: anyVideoVisible)
+                DispatchQueue.main.async {
+                    self.nativeRotateButton.isHidden = !anyVideoVisible
+                }
             }
             return
         }
@@ -272,19 +271,7 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
                 
                 if self.isFullscreen != anyFullscreen {
                     DispatchQueue.main.async {
-                        self.isFullscreen = anyFullscreen
-                        self.navigationController?.setNavigationBarHidden(anyFullscreen, animated: true)
-                        self.setNeedsStatusBarAppearanceUpdate()
-                        self.updateRotateButtonVisibility(visible: !self.nativeRotateButton.isHidden)
-                        
-                        if !anyFullscreen {
-                            self.setOrientation(.portrait)
-                            self.targetOrientation = .all
-                            if #available(iOS 16.0, *) {
-                                self.setNeedsUpdateOfSupportedInterfaceOrientations()
-                                self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                            }
-                        }
+                        self.setOrientationVisual(anyFullscreen)
                     }
                 }
             }
@@ -332,7 +319,6 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "videoVisibility")
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "fullscreenState")
     }
