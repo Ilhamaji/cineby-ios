@@ -1227,10 +1227,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             stopUnlockAutoHideTimer()
         }
         
-        // Broadcast lock message ke semua frame (untuk Nimegami)
-        if activeSite != .cineby {
-            broadcastPlaybackLockState(isPlaybackLocked)
-        }
+        // Broadcast lock state ke semua frame — baik Cineby maupun Nimegami
+        // Cineby: video ada di iframe third-party (vidsrc, dll) yang perlu menerima pesan ini
+        broadcastPlaybackLockState(isPlaybackLocked)
     }
 
     private func broadcastPlaybackLockState(_ locked: Bool) {
@@ -1398,16 +1397,95 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
 
     /// Sembunyikan video playback bawaan Cineby SECARA INSTAN saat lock aktif.
-    /// CSS sudah pre-inject di earlyScript — cukup toggle class di <html> untuk efek langsung.
+    /// Toggle class di <html> untuk main frame, PLUS inject CSS langsung ke semua iframe
+    /// (karena player Cineby ada di iframe cross-origin yang tidak bisa dijangkau CSS biasa).
     private func hideCinebyNativeControls() {
-        // Operasi sangat minimal: hanya tambah 1 class pada <html>
-        // Tidak perlu buat/append style element — jauh lebih cepat dari evaluateJavaScript penuh
-        webView.evaluateJavaScript("document.documentElement.classList.add('cineby-locked')", completionHandler: nil)
+        let js = """
+        (function() {
+            // 1. Toggle class di main frame
+            document.documentElement.classList.add('cineby-locked');
+            
+            // 2. Inject CSS hiding langsung ke semua iframe yang bisa diakses (same-origin)
+            var lockCSS = [
+                'video::-webkit-media-controls { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-enclosure { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-panel { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-play-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-overlay-play-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-start-playback-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-timeline { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-volume-slider { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-mute-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-fullscreen-button { display:none!important; opacity:0!important; }',
+                '*::-webkit-media-controls { display:none!important; }',
+                '*::-webkit-media-controls-overlay-play-button { display:none!important; }',
+                '*::-webkit-media-controls-start-playback-button { display:none!important; }',
+                '.jw-controls,.jw-controlbar,.jw-title,.jw-logo,.jw-display-icon-container { display:none!important; opacity:0!important; }',
+                '.vjs-control-bar,.vjs-big-play-button { display:none!important; opacity:0!important; }',
+                '.plyr__controls,.plyr__play-large { display:none!important; opacity:0!important; }',
+                '.art-control,.art-controls,.art-bottom,.art-progress,.art-state,.art-play { display:none!important; opacity:0!important; }',
+                '.dplayer-controller,.dplayer-bar-wrap { display:none!important; opacity:0!important; }',
+                '.shaka-bottom-controls,.shaka-settings-menu { display:none!important; opacity:0!important; }'
+            ].join(' ');
+            
+            function injectCSS(doc) {
+                try {
+                    var style = doc.getElementById('cineby-iframe-lock');
+                    if (!style) {
+                        style = doc.createElement('style');
+                        style.id = 'cineby-iframe-lock';
+                        (doc.head || doc.documentElement).appendChild(style);
+                    }
+                    style.innerHTML = lockCSS;
+                    // Disable video controls programmatically
+                    doc.querySelectorAll('video').forEach(function(v) {
+                        v.controls = false;
+                        v.removeAttribute('controls');
+                    });
+                } catch(e) {}
+            }
+            
+            function walkFrames(win) {
+                try { injectCSS(win.document); } catch(e) {}
+                try {
+                    for (var i = 0; i < win.frames.length; i++) {
+                        try { walkFrames(win.frames[i]); } catch(e) {}
+                    }
+                } catch(e) {}
+            }
+            
+            walkFrames(window);
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     /// Tampilkan kembali video playback bawaan Cineby saat lock dilepas.
     private func showCinebyNativeControls() {
-        webView.evaluateJavaScript("document.documentElement.classList.remove('cineby-locked')", completionHandler: nil)
+        let js = """
+        (function() {
+            document.documentElement.classList.remove('cineby-locked');
+            
+            function removeCSS(doc) {
+                try {
+                    var style = doc.getElementById('cineby-iframe-lock');
+                    if (style) style.remove();
+                } catch(e) {}
+            }
+            
+            function walkFrames(win) {
+                try { removeCSS(win.document); } catch(e) {}
+                try {
+                    for (var i = 0; i < win.frames.length; i++) {
+                        try { walkFrames(win.frames[i]); } catch(e) {}
+                    }
+                } catch(e) {}
+            }
+            
+            walkFrames(window);
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     func setOrientationVisual(_ landscape: Bool) {

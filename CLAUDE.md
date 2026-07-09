@@ -121,3 +121,12 @@ Script `patch_ios.sh` akan merge `ios-cineby/WebViewController.swift` ke dalam `
 5. **Saat mengubah JS**: Script diinjeksi ke **semua frame**, efek samping bisa terjadi di iframe player third-party. Test mental di kedua site (Cineby via iframe embed, Nimegami via direct video).
 6. **Nimegami**: Video langsung ada di frame utama. **Cineby**: Video ada di dalam iframe player third-party (vidsrc, dll).
 7. **Jangan baca seluruh file** jika hanya perlu mengubah satu bagian — gunakan `view_file` dengan range spesifik atau `grep_search` terlebih dahulu.
+8. **Fleksibilitas edit file lain**: Jika masalah membutuhkan perubahan di file selain `WebViewController.swift` (misalnya `SceneDelegate.swift`, `AppDelegate.swift`, atau `CLAUDE.md`) demi fungsionalitas yang benar, AI **boleh dan harus** mengedit file tersebut tanpa perlu izin tambahan. Prioritas adalah perilaku yang benar, bukan batasan scope.
+
+---
+
+## Panduan Debugging Khusus Cineby
+
+- **Lock tidak hide playback?** → Periksa apakah `broadcastPlaybackLockState()` dipanggil untuk Cineby (seharusnya dipanggil untuk semua site). Cineby menggunakan iframe third-party yang perlu menerima postMessage `playbackLock`.
+- **CSS lock tidak efektif di iframe?** → Gunakan `hideCinebyNativeControls()` yang melakukan `walkFrames()` untuk inject CSS langsung ke setiap frame yang bisa diakses.
+- **Player Cineby tidak ter-detect?** → Video ada di iframe cross-origin (vidsrc, dll). `earlyScript` sudah diinjeksi ke semua frame, jadi `postMessage` dari iframe ke Swift seharusnya berfungsi.
