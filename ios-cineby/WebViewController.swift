@@ -30,6 +30,14 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         let js = """
         (function() {
           try {
+            // Disable native WebKit fullscreen player on iPhone to force HTML5 player fullscreen
+            try {
+              HTMLVideoElement.prototype.webkitEnterFullscreen = undefined;
+              HTMLVideoElement.prototype.webkitEnterFullScreen = undefined;
+              HTMLVideoElement.prototype.webkitRequestFullscreen = undefined;
+              HTMLVideoElement.prototype.webkitRequestFullScreen = undefined;
+            } catch (e) {}
+
             function hasVisibleVideo() {
               var videos = Array.from(document.querySelectorAll('video'));
               return videos.some(function(video) {
@@ -148,6 +156,14 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         }
     }
 
+    private func getActiveWindowScene() -> UIWindowScene? {
+        if #available(iOS 13.0, *) {
+            return UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+        }
+        return nil
+    }
+
     func setOrientation(_ orientation: UIInterfaceOrientation) {
         let mask: UIInterfaceOrientationMask
         switch orientation {
@@ -168,7 +184,10 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         if #available(iOS 16.0, *) {
             self.setNeedsUpdateOfSupportedInterfaceOrientations()
             self.navigationController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            guard let windowScene = self.view.window?.windowScene else { return }
+            
+            let scene = self.getActiveWindowScene() ?? self.view.window?.windowScene
+            guard let windowScene = scene else { return }
+            
             let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
             windowScene.requestGeometryUpdate(geometryPreferences) { error in
                 NSLog("Failed to change orientation: \(error.localizedDescription)")
