@@ -35,7 +35,7 @@ jobs:
       - name: Ensure Capacitor iOS platform
         run: |
           cd capacitor-app
-          npx cap sync ios
+          npx --yes @capacitor/cli sync ios
 
       - name: Build unsigned .app archive
         working-directory: ios/App

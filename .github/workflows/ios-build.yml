@@ -37,7 +37,7 @@ jobs:
       - name: Ensure Capacitor iOS platform
         run: |
           cd capacitor-app
-          npx cap sync ios
+          npx --yes @capacitor/cli sync ios
 
       - name: Install fastlane
         run: |
