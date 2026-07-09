@@ -33,6 +33,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     private var hasActiveVideo = false
     
     private var unlockAutoHideTimer: Timer?
+    private var lockBroadcastTimer: Timer?
     private var screenTapGesture: UITapGestureRecognizer!
 
     private var webViewConstraints: [NSLayoutConstraint] = []
@@ -612,52 +613,46 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 var locked = event.data.locked;
                 if (locked) {
                   document.body.classList.add('playback-locked');
+                  document.documentElement.classList.add('playback-locked');
                   var overlay = document.getElementById('mstream-controls-overlay');
                   if (overlay) {
                     overlay.style.opacity = '0';
                     overlay.style.pointerEvents = 'none';
                   }
                   
-                  // Setup recursive/continuous JS enforcement
+                  // Setup recursive/continuous JS enforcement (150ms interval)
                   if (window.mstreamLockInterval) clearInterval(window.mstreamLockInterval);
                   
                   var enforceHiding = function() {
-                    if (!document.body.classList.contains('playback-locked')) {
+                    if (!document.body.classList.contains('playback-locked') && !document.documentElement.classList.contains('playback-locked')) {
                       if (window.mstreamLockInterval) clearInterval(window.mstreamLockInterval);
                       return;
                     }
                     var selectors = [
-                      /* JW Player */
-                      '.jw-controls', '.jw-controlbar', '.jw-title', '.jw-logo',
-                      '.jw-nextup-container', '.jw-display-icon-container',
-                      '.jw-settings-menu', '.jw-settings-submenu', '.jw-settings-content',
-                      '.jw-submenu', '.jw-icon-inline', '.jw-slider-container', '.jw-time-tip',
-                      /* Video.js */
-                      '.vjs-control-bar', '.vjs-big-play-button', '.vjs-loading-spinner', '.vjs-poster',
-                      /* Plyr */
-                      '.plyr__controls',
-                      /* Artplayer */
-                      '.art-control', '.art-controls', '.art-bottom', '.art-progress',
-                      '.art-state', '.art-state-play', '.art-play', '.art-poster',
-                      /* DPlayer */
-                      '.dplayer-controller', '.dplayer-bar-wrap', '.dplayer-menu', '.dplayer-setting-box',
-                      /* Shaka Player */
-                      '.shaka-bottom-controls', '.shaka-settings-menu', '.shaka-overflow-menu',
-                      /* Cineby-specific */
-                      '.cb-controlbar', '.cb-control', '.cb-controls',
-                      '.player-controlbar', '.player-bottom', '.player-ui',
-                      '.video-controlbar', '.video-bottombar'
+                      'button', 'a', '.controls', '.control-bar', '.controlbar',
+                      '[class*="control" i]', '[class*="btn" i]', '[class*="button" i]',
+                      '[class*="menu" i]', '[class*="panel" i]', '[class*="overlay" i]',
+                      '[class*="title" i]', '[class*="logo" i]',
+                      '[id*="control" i]', '[id*="btn" i]', '[id*="button" i]',
+                      '.jw-controls', '.jw-controlbar', '.vjs-control-bar', '.plyr__controls',
+                      '.art-controls', '.art-bottom', '.dplayer-controller', '.shaka-bottom-controls'
                     ];
                     selectors.forEach(function(sel) {
                       try {
                         var elements = document.querySelectorAll(sel);
                         for (var i = 0; i < elements.length; i++) {
-                          // Never hide our own dedicated overlay
-                          if (elements[i].id === 'mstream-controls-overlay') continue;
-                          elements[i].style.setProperty('display', 'none', 'important');
-                          elements[i].style.setProperty('opacity', '0', 'important');
-                          elements[i].style.setProperty('visibility', 'hidden', 'important');
-                          elements[i].style.setProperty('pointer-events', 'none', 'important');
+                          var el = elements[i];
+                          if (el.id === 'mstream-controls-overlay') continue;
+                          if (el.closest('#mstream-controls-overlay')) continue;
+                          if (el.nodeName === 'VIDEO' || el.nodeName === 'BODY' || el.nodeName === 'HTML') continue;
+                          if (el.classList.contains('jwplayer') || el.classList.contains('plyr') || 
+                              el.classList.contains('artplayer') || el.classList.contains('video-js') || 
+                              el.classList.contains('dplayer')) continue;
+                          
+                          el.style.setProperty('display', 'none', 'important');
+                          el.style.setProperty('opacity', '0', 'important');
+                          el.style.setProperty('visibility', 'hidden', 'important');
+                          el.style.setProperty('pointer-events', 'none', 'important');
                         }
                       } catch(e) {}
                     });
@@ -672,9 +667,10 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                   };
                   
                   enforceHiding();
-                  window.mstreamLockInterval = setInterval(enforceHiding, 250);
+                  window.mstreamLockInterval = setInterval(enforceHiding, 150);
                 } else {
                   document.body.classList.remove('playback-locked');
+                  document.documentElement.classList.remove('playback-locked');
                   if (window.mstreamLockInterval) {
                     clearInterval(window.mstreamLockInterval);
                     window.mstreamLockInterval = null;
@@ -682,17 +678,25 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                   
                   // Restore elements by clearing the inline properties
                   var selectors = [
+                    'button', 'a', '.controls', '.control-bar', '.controlbar',
+                    '[class*="control" i]', '[class*="btn" i]', '[class*="button" i]',
+                    '[class*="menu" i]', '[class*="panel" i]', '[class*="overlay" i]',
+                    '[class*="title" i]', '[class*="logo" i]',
+                    '[id*="control" i]', '[id*="btn" i]', '[id*="button" i]',
                     '.jw-controls', '.jw-controlbar', '.jw-settings-menu', '.jw-settings-submenu',
-                    '.art-controls', '.art-bottom', '[class*="control" i]', '[class*="bottom-bar" i]'
+                    '.art-controls', '.art-bottom'
                   ];
                   selectors.forEach(function(sel) {
                     try {
                       var elements = document.querySelectorAll(sel);
                       for (var i = 0; i < elements.length; i++) {
-                        elements[i].style.removeProperty('display');
-                        elements[i].style.removeProperty('opacity');
-                        elements[i].style.removeProperty('visibility');
-                        elements[i].style.removeProperty('pointer-events');
+                        var el = elements[i];
+                        if (el.id === 'mstream-controls-overlay') continue;
+                        if (el.closest('#mstream-controls-overlay')) continue;
+                        el.style.removeProperty('display');
+                        el.style.removeProperty('opacity');
+                        el.style.removeProperty('visibility');
+                        el.style.removeProperty('pointer-events');
                       }
                     } catch(e) {}
                   });
@@ -707,30 +711,40 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     document.head.appendChild(style);
                   }
                   style.innerHTML = `
-                    /* JW Player */
-                    .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
-                    .jw-nextup-container, .jw-display-icon-container,
-                    .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
-                    .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
-                    /* Video.js */
-                    .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
-                    /* Plyr */
-                    .plyr__controls,
-                    /* Artplayer */
-                    .art-control, .art-controls, .art-bottom, .art-progress,
-                    .art-state, .art-state-play, .art-play, .art-poster,
-                    /* DPlayer */
-                    .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
-                    /* Shaka Player */
-                    .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
-                    /* Cineby-specific */
-                    .cb-controlbar, .cb-control, .cb-controls,
-                    .player-controlbar, .player-bottom, .player-ui,
-                    .video-controlbar, .video-bottombar {
+                    /* Aggressive hiding of all controls inside locked frames */
+                    .playback-locked [class*="control" i]:not(video):not(body):not(html),
+                    .playback-locked [class*="player" i]:not(video):not(body):not(html):not(.jwplayer):not(.plyr):not(.artplayer):not(.video-js):not(.dplayer),
+                    .playback-locked [class*="button" i]:not(video),
+                    .playback-locked [class*="btn" i]:not(video),
+                    .playback-locked [class*="menu" i]:not(video),
+                    .playback-locked [class*="tooltip" i]:not(video),
+                    .playback-locked [class*="title" i]:not(video),
+                    .playback-locked [class*="logo" i]:not(video),
+                    .playback-locked [class*="banner" i]:not(video),
+                    .playback-locked [class*="loading" i]:not(video),
+                    .playback-locked [class*="spinner" i]:not(video),
+                    .playback-locked button:not(video),
+                    .playback-locked a:not(video),
+                    .playback-locked [id*="control" i]:not(video):not(body):not(html),
+                    .playback-locked [id*="player" i]:not(video):not(body):not(html):not(.jwplayer):not(.plyr):not(.artplayer):not(.video-js):not(.dplayer),
+                    .playback-locked [id*="button" i]:not(video),
+                    .playback-locked [id*="btn" i]:not(video) {
                         display: none !important;
                         opacity: 0 !important;
                         visibility: hidden !important;
                         pointer-events: none !important;
+                    }
+                    
+                    /* Webkit native controls hiding */
+                    .playback-locked *::-webkit-media-controls,
+                    .playback-locked *::-webkit-media-controls-enclosure,
+                    .playback-locked *::-webkit-media-controls-panel,
+                    .playback-locked *::-webkit-media-controls-play-button,
+                    .playback-locked *::-webkit-media-controls-overlay-play-button,
+                    .playback-locked *::-webkit-media-controls-start-playback-button {
+                        display: none !important;
+                        opacity: 0 !important;
+                        visibility: hidden !important;
                     }
                   `;
                   
@@ -1207,6 +1221,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             }
             
             resetUnlockAutoHideTimer()
+            startLockBroadcastTimer()
         } else {
             let unlockIcon = UIImage(systemName: "lock.open.fill", withConfiguration: config)
             nativeLockButton.setImage(unlockIcon, for: .normal)
@@ -1225,11 +1240,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             }
             
             stopUnlockAutoHideTimer()
+            stopLockBroadcastTimer()
+            broadcastPlaybackLockState(false)
         }
-        
-        // Broadcast lock state ke semua frame — baik Cineby maupun Nimegami
-        // Cineby: video ada di iframe third-party (vidsrc, dll) yang perlu menerima pesan ini
-        broadcastPlaybackLockState(isPlaybackLocked)
     }
 
     private func broadcastPlaybackLockState(_ locked: Bool) {
@@ -1253,6 +1266,32 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
         })();
         """
         webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func startLockBroadcastTimer() {
+        stopLockBroadcastTimer()
+        // Broadcast immediately once
+        broadcastPlaybackLockState(true)
+        if activeSite == .cineby {
+            hideCinebyNativeControls()
+        }
+        // Repeat every 1.0 second to enforce lock state on dynamically loaded iframes/players
+        lockBroadcastTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            if self.isPlaybackLocked {
+                self.broadcastPlaybackLockState(true)
+                if self.activeSite == .cineby {
+                    self.hideCinebyNativeControls()
+                }
+            } else {
+                self.stopLockBroadcastTimer()
+            }
+        }
+    }
+
+    private func stopLockBroadcastTimer() {
+        lockBroadcastTimer?.invalidate()
+        lockBroadcastTimer = nil
     }
 
     private func resetUnlockAutoHideTimer() {
@@ -1397,8 +1436,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
 
     /// Sembunyikan video playback bawaan Cineby SECARA INSTAN saat lock aktif.
-    /// Toggle class di <html> untuk main frame, PLUS inject CSS langsung ke semua iframe
-    /// (karena player Cineby ada di iframe cross-origin yang tidak bisa dijangkau CSS biasa).
+    /// Toggle class di <html> untuk main frame, PLUS inject CSS langsung ke semua iframe.
     private func hideCinebyNativeControls() {
         let js = """
         (function() {
@@ -1425,7 +1463,17 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 '.plyr__controls,.plyr__play-large { display:none!important; opacity:0!important; }',
                 '.art-control,.art-controls,.art-bottom,.art-progress,.art-state,.art-play { display:none!important; opacity:0!important; }',
                 '.dplayer-controller,.dplayer-bar-wrap { display:none!important; opacity:0!important; }',
-                '.shaka-bottom-controls,.shaka-settings-menu { display:none!important; opacity:0!important; }'
+                '.shaka-bottom-controls,.shaka-settings-menu { display:none!important; opacity:0!important; }',
+                /* Dynamic Wildcard CSS overrides */
+                '[class*="control" i]:not(video):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[class*="player" i]:not(video):not(body):not(html):not(.jwplayer):not(.plyr):not(.artplayer):not(.video-js):not(.dplayer) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[class*="button" i]:not(video), [class*="btn" i]:not(video), [class*="menu" i]:not(video) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[class*="tooltip" i]:not(video), [class*="title" i]:not(video), [class*="logo" i]:not(video) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[class*="banner" i]:not(video), [class*="loading" i]:not(video), [class*="spinner" i]:not(video) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                'button:not(video), a:not(video) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[id*="control" i]:not(video):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[id*="player" i]:not(video):not(body):not(html):not(.jwplayer):not(.plyr):not(.artplayer):not(.video-js):not(.dplayer) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[id*="button" i]:not(video), [id*="btn" i]:not(video) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }'
             ].join(' ');
             
             function injectCSS(doc) {
@@ -1497,6 +1545,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             webView.isUserInteractionEnabled = true
             screenTapGesture.isEnabled = false
             stopUnlockAutoHideTimer()
+            stopLockBroadcastTimer()
             
             let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
             let unlockIcon = UIImage(systemName: "lock.open.fill", withConfiguration: config)
