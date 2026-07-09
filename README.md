@@ -7,13 +7,15 @@ Aplikasi ini adalah wrapper iOS native untuk situs streaming film [Cineby](https
 ## Fitur Utama
 
 1. **Bypass Portrait Orientation Lock**: Menonton film dalam posisi landscape layar penuh secara instan meskipun fitur *Portrait Orientation Lock* (Kunci Orientasi Potret) di iPhone Anda sedang **Aktif/Menyala**.
-2. **Kontrol Navigasi Premium & Intuitif**:
+2. **Kontrol Navigasi Bulat Premium (Reddit-Style)**:
    * **Mode Portrait:** Tombol teks **"Rotate ↻"** yang bersih di sebelah kanan atas navigation bar untuk memutar layar.
-   * **Mode Landscape:** Tombol melayang **"Portrait ↻"** dengan desain gelap semi-transparan dan bingkai putih yang elegan di pojok kanan bawah untuk mengembalikan tampilan ke potret. Teks tombol ikut berotasi 90 derajat sehingga tetap terbaca mendatar.
-3. **Playback Lock Screen (Kunci Layar)**:
-   * **Tombol "Lock 🔓"**: Di pojok kiri bawah landscape (secara fisik di top-left) terdapat tombol kunci. Saat ditekan, tombol berubah menjadi merah **"Unlock 🔒"**, tombol rotasi **"Portrait ↻"** disembunyikan, dan seluruh interaksi sentuh pada pemutar video/WebView dinonaktifkan.
-   * Mencegah ketukan tidak sengaja mengganggu jalannya film (seperti memicu pause, seek, atau memunculkan kontrol pemutar).
-   * Tekan **"Unlock 🔒"** kembali untuk memunculkan tombol rotasi dan mengaktifkan kembali interaksi sentuh.
+   * **Mode Landscape:** Tombol melayang berbentuk bulat (Reddit-Style) berukuran 50x50 dengan desain gelap semi-transparan, bingkai putih yang elegan, dan ikon **SF Symbols** (`arrow.triangle.2.circlepath` untuk rotasi, `lock.open.fill` untuk kunci).
+3. **Playback Lock Screen Instan & Auto-Hide**:
+   * **Tombol "Lock"**: Berbentuk bulat di pojok kiri bawah landscape (secara fisik di top-left). Saat ditekan, tombol berubah menjadi merah dengan ikon gembok tertutup, menyembunyikan tombol rotasi, dan menonaktifkan seluruh interaksi sentuh pada pemutar video/WebView.
+   * **Auto-Hide (Sembunyi Otomatis)**: Tombol gembok merah tersebut akan **otomatis memudar hingga hilang dalam 3 detik** setelah diaktifkan agar tampilan film bersih tanpa gangguan ikon.
+   * **Tap-to-Toggle (Ketuk Layar)**: Ketuk layar kosong di mana saja sekali untuk memunculkan kembali tombol gembok (tampil selama 3 detik) atau mengetuknya sekali lagi untuk langsung menyembunyikannya kembali secara instan.
+   * **Penyembunyian Kontrol Instan**: Menggunakan penyiaran pesan antar-frame (`window.postMessage`) yang seketika menyembunyikan bilah kontrol pemutar film (JWPlayer, VideoJS, dll) secara instan tanpa menunggu waktu jeda otomatis.
+   * Tekan tombol **"Unlock"** (gembok merah) kembali untuk memunculkan tombol rotasi dan mengaktifkan kembali kontrol pemutaran.
 4. **True Edge-to-Edge Fullscreen (Bebas Margin Hitam)**: 
    * Menggunakan modifikasi viewport dinamis dan injeksi CSS secara real-time saat rotasi diaktifkan.
    * Mematikan safe area insets secara otomatis di mode landscape agar video memenuhi seluruh layar fisik iPhone tanpa terpotong notch atau home indicator.
@@ -70,5 +72,5 @@ Karena file `.ipa` yang dihasilkan tidak ditandatangani secara resmi (unsigned),
 2. Jelajahi situs dan pilih film yang ingin Anda tonton.
 3. Saat film mulai diputar, ketuk tombol **"Rotate ↻"** di pojok kanan atas navigation bar.
 4. Layar aplikasi akan berputar 90 derajat. Miringkan iPhone Anda secara horizontal untuk menonton film dalam tampilan landscape layar penuh.
-5. Saat berada di mode landscape, Anda dapat menekan tombol **"Lock 🔓"** di sebelah kiri bawah landscape untuk mengunci layar. Tombol akan berubah menjadi merah **"Unlock 🔒"** dan tombol **"Portrait ↻"** akan disembunyikan untuk mencegah sentuhan tidak sengaja pada pemutar film.
-6. Ketuk **"Unlock 🔒"** kembali untuk membuka kunci, lalu ketuk tombol melayang **"Portrait ↻"** di pojok kanan bawah untuk mengembalikan aplikasi ke mode tegak normal.
+5. Saat berada di mode landscape, Anda dapat menekan tombol bulat gembok terbuka di sebelah kiri bawah landscape untuk mengunci layar. Tombol akan berubah menjadi merah dengan gembok tertutup, dan tombol rotasi di sebelah kanan akan langsung menghilang beserta seluruh bilah kontrol pemutar film secara instan. Tombol gembok merah tersebut kemudian akan otomatis menghilang setelah 3 detik.
+6. Untuk membuka kunci: Ketuk layar kosong sekali di mana saja untuk memunculkan kembali tombol merah gembok, lalu segera ketuk tombol gembok tersebut untuk membuka kunci. Setelah terbuka, ketuk tombol melayang bulat rotasi di pojok kanan bawah untuk mengembalikan aplikasi ke mode tegak normal.

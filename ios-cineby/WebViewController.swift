@@ -9,6 +9,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private var isFullscreen = false
     private var isLandscapeRotated = false
     private var isPlaybackLocked = false
+    
+    private var unlockAutoHideTimer: Timer?
+    private var screenTapGesture: UITapGestureRecognizer!
 
     private var webViewConstraints: [NSLayoutConstraint] = []
     private var rotateButtonConstraints: [NSLayoutConstraint] = []
@@ -23,6 +26,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         setupNativeRotateButton()
         setupNativeLockButton()
         setupNavigationBarRotateButton()
+        setupTapGesture()
         loadWebApp()
     }
 
@@ -45,6 +49,39 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             observer.observe(document.body, { childList: true, subtree: true });
             setInterval(forcePlaysInline, 1000);
             forcePlaysInline();
+
+            // Listen for playback lock messages from the main frame
+            window.addEventListener('message', function(event) {
+              if (event.data && event.data.type === 'playbackLock') {
+                var locked = event.data.locked;
+                var style = document.getElementById('playback-lock-style-override');
+                if (locked) {
+                  if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'playback-lock-style-override';
+                    document.head.appendChild(style);
+                  }
+                  style.innerHTML = `
+                    .jw-controls, .jw-controlbar, .jw-title, .jw-logo, .jw-nextup-container,
+                    .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, 
+                    .plyr__controls, 
+                    .art-control, .art-controls, .art-mask, .art-state,
+                    .control-bar, .player-controls, .video-controls, .controls,
+                    [class*="controlbar"], [class*="control-bar"], [class*="player-bar"],
+                    [class*="video-bar"], [class*="player-controls"] {
+                        display: none !important;
+                        opacity: 0 !important;
+                        visibility: hidden !important;
+                        pointer-events: none !important;
+                    }
+                  `;
+                } else {
+                  if (style) {
+                    style.remove();
+                  }
+                }
+              }
+            });
           } catch (e) {}
         })();
         """
@@ -90,13 +127,16 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
 
     func setupNativeRotateButton() {
         nativeRotateButton = UIButton(type: .system)
-        nativeRotateButton.setTitle("Portrait ↻", for: .normal)
-        nativeRotateButton.setTitleColor(.white, for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
+        let icon = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: config)
+        nativeRotateButton.setImage(icon, for: .normal)
+        nativeRotateButton.tintColor = .white
+        
         nativeRotateButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
         nativeRotateButton.layer.borderColor = UIColor.white.cgColor
         nativeRotateButton.layer.borderWidth = 1
-        nativeRotateButton.layer.cornerRadius = 10
-        nativeRotateButton.titleLabel?.font = UIFont.boldSystemFont(ofSize: 14)
+        nativeRotateButton.layer.cornerRadius = 25
+        nativeRotateButton.clipsToBounds = true
         nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
         nativeRotateButton.isHidden = true
         nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
@@ -109,13 +149,16 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
 
     func setupNativeLockButton() {
         nativeLockButton = UIButton(type: .system)
-        nativeLockButton.setTitle("Lock 🔓", for: .normal)
-        nativeLockButton.setTitleColor(.white, for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
+        let icon = UIImage(systemName: "lock.open.fill", withConfiguration: config)
+        nativeLockButton.setImage(icon, for: .normal)
+        nativeLockButton.tintColor = .white
+        
         nativeLockButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
         nativeLockButton.layer.borderColor = UIColor.white.cgColor
         nativeLockButton.layer.borderWidth = 1
-        nativeLockButton.layer.cornerRadius = 10
-        nativeLockButton.titleLabel?.font = UIFont.boldSystemFont(ofSize: 14)
+        nativeLockButton.layer.cornerRadius = 25
+        nativeLockButton.clipsToBounds = true
         nativeLockButton.translatesAutoresizingMaskIntoConstraints = false
         nativeLockButton.isHidden = true
         nativeLockButton.addTarget(self, action: #selector(nativeLockTapped), for: .touchUpInside)
@@ -132,6 +175,12 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         self.navigationItem.rightBarButtonItem = rotateButton
     }
 
+    func setupTapGesture() {
+        screenTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleScreenTap))
+        screenTapGesture.isEnabled = false
+        view.addGestureRecognizer(screenTapGesture)
+    }
+
     private func updateRotateButtonConstraints(landscape: Bool) {
         NSLayoutConstraint.deactivate(rotateButtonConstraints)
         
@@ -140,16 +189,16 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             rotateButtonConstraints = [
                 nativeRotateButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
                 nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-                nativeRotateButton.widthAnchor.constraint(equalToConstant: 100),
-                nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+                nativeRotateButton.widthAnchor.constraint(equalToConstant: 50),
+                nativeRotateButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         } else {
             // Normal bottom-right safe area in portrait
             rotateButtonConstraints = [
                 nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
                 nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-                nativeRotateButton.widthAnchor.constraint(equalToConstant: 100),
-                nativeRotateButton.heightAnchor.constraint(equalToConstant: 40)
+                nativeRotateButton.widthAnchor.constraint(equalToConstant: 50),
+                nativeRotateButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         }
         NSLayoutConstraint.activate(rotateButtonConstraints)
@@ -163,16 +212,16 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             lockButtonConstraints = [
                 nativeLockButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
                 nativeLockButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-                nativeLockButton.widthAnchor.constraint(equalToConstant: 100),
-                nativeLockButton.heightAnchor.constraint(equalToConstant: 40)
+                nativeLockButton.widthAnchor.constraint(equalToConstant: 50),
+                nativeLockButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         } else {
             // Normal bottom-left safe area in portrait (though hidden)
             lockButtonConstraints = [
                 nativeLockButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
                 nativeLockButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-                nativeLockButton.widthAnchor.constraint(equalToConstant: 100),
-                nativeLockButton.heightAnchor.constraint(equalToConstant: 40)
+                nativeLockButton.widthAnchor.constraint(equalToConstant: 50),
+                nativeLockButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         }
         NSLayoutConstraint.activate(lockButtonConstraints)
@@ -198,18 +247,90 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         NSLog("nativeLockTapped called")
         isPlaybackLocked.toggle()
         
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
+        
         if isPlaybackLocked {
-            nativeLockButton.setTitle("Unlock 🔒", for: .normal)
+            let lockIcon = UIImage(systemName: "lock.fill", withConfiguration: config)
+            nativeLockButton.setImage(lockIcon, for: .normal)
             nativeLockButton.backgroundColor = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 0.9)
             nativeLockButton.layer.borderColor = UIColor.red.cgColor
+            nativeLockButton.alpha = 1.0
+            nativeLockButton.isUserInteractionEnabled = true
+            
             nativeRotateButton.isHidden = true
             webView.isUserInteractionEnabled = false
+            screenTapGesture.isEnabled = true
+            
+            resetUnlockAutoHideTimer()
         } else {
-            nativeLockButton.setTitle("Lock 🔓", for: .normal)
+            let unlockIcon = UIImage(systemName: "lock.open.fill", withConfiguration: config)
+            nativeLockButton.setImage(unlockIcon, for: .normal)
             nativeLockButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
             nativeLockButton.layer.borderColor = UIColor.white.cgColor
+            nativeLockButton.alpha = 1.0
+            nativeLockButton.isUserInteractionEnabled = true
+            
             nativeRotateButton.isHidden = false
             webView.isUserInteractionEnabled = true
+            screenTapGesture.isEnabled = false
+            
+            stopUnlockAutoHideTimer()
+        }
+        
+        // Broadcast the lock message to all frames instantly
+        broadcastPlaybackLockState(isPlaybackLocked)
+    }
+
+    private func broadcastPlaybackLockState(_ locked: Bool) {
+        let js = """
+        (function() {
+            var locked = \(locked);
+            // Send to current window
+            window.postMessage({ type: 'playbackLock', locked: locked }, '*');
+            // Send to all child iframes
+            var iframes = document.querySelectorAll('iframe');
+            for (var i = 0; i < iframes.length; i++) {
+                try {
+                    iframes[i].contentWindow.postMessage({ type: 'playbackLock', locked: locked }, '*');
+                } catch (e) {}
+            }
+        })();
+        """
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func resetUnlockAutoHideTimer() {
+        stopUnlockAutoHideTimer()
+        unlockAutoHideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            UIView.animate(withDuration: 0.3) {
+                self.nativeLockButton.alpha = 0
+            } completion: { _ in
+                self.nativeLockButton.isUserInteractionEnabled = false
+            }
+        }
+    }
+
+    private func stopUnlockAutoHideTimer() {
+        unlockAutoHideTimer?.invalidate()
+        unlockAutoHideTimer = nil
+    }
+
+    @objc func handleScreenTap() {
+        NSLog("handleScreenTap called")
+        
+        let newAlpha: CGFloat = nativeLockButton.alpha == 0 ? 1.0 : 0.0
+        
+        UIView.animate(withDuration: 0.3) {
+            self.nativeLockButton.alpha = newAlpha
+        } completion: { _ in
+            self.nativeLockButton.isUserInteractionEnabled = (newAlpha > 0)
+        }
+        
+        if newAlpha > 0 {
+            resetUnlockAutoHideTimer()
+        } else {
+            stopUnlockAutoHideTimer()
         }
     }
 
@@ -220,10 +341,20 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         if !landscape {
             isPlaybackLocked = false
             webView.isUserInteractionEnabled = true
-            nativeLockButton.setTitle("Lock 🔓", for: .normal)
+            screenTapGesture.isEnabled = false
+            stopUnlockAutoHideTimer()
+            
+            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
+            let unlockIcon = UIImage(systemName: "lock.open.fill", withConfiguration: config)
+            nativeLockButton.setImage(unlockIcon, for: .normal)
             nativeLockButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
             nativeLockButton.layer.borderColor = UIColor.white.cgColor
+            nativeLockButton.alpha = 1.0
+            nativeLockButton.isUserInteractionEnabled = true
             nativeLockButton.isHidden = true
+            
+            // Broadcast unlock state to clear styles
+            broadcastPlaybackLockState(false)
         }
         
         // Update content inset adjustment behavior
@@ -248,6 +379,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
                 self.nativeRotateButton.isHidden = false
                 
                 self.nativeLockButton.transform = CGAffineTransform(rotationAngle: .pi / 2)
+                self.nativeLockButton.alpha = 1.0
+                self.nativeLockButton.isUserInteractionEnabled = true
                 self.nativeLockButton.isHidden = false
             } else {
                 self.webView.transform = .identity
