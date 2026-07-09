@@ -4,7 +4,8 @@ import WebKit
 class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     var webView: WKWebView!
     private var containerView: UIView!
-    private var nativeRotateButton: UIButton!
+    private var portraitRotateButton: UIButton!
+    private var landscapeRotateButton: UIButton!
     private var nativeLockButton: UIButton!
     private var isFullscreen = false
     private var isLandscapeRotated = false
@@ -20,12 +21,12 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
-        title = "Cineby"
+        self.navigationController?.setNavigationBarHidden(true, animated: false)
 
         setupWebView()
-        setupNativeRotateButton()
+        setupPortraitRotateButton()
+        setupLandscapeRotateButton()
         setupNativeLockButton()
-        setupNavigationBarRotateButton()
         setupTapGesture()
         loadWebApp()
     }
@@ -150,24 +151,51 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         NSLayoutConstraint.activate(webViewConstraints)
     }
 
-    func setupNativeRotateButton() {
-        nativeRotateButton = UIButton(type: .system)
+    func setupPortraitRotateButton() {
+        portraitRotateButton = UIButton(type: .system)
         let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
         let icon = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: config)
-        nativeRotateButton.setImage(icon, for: .normal)
-        nativeRotateButton.tintColor = .white
+        portraitRotateButton.setImage(icon, for: .normal)
+        portraitRotateButton.tintColor = .white
         
-        nativeRotateButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
-        nativeRotateButton.layer.borderColor = UIColor.white.cgColor
-        nativeRotateButton.layer.borderWidth = 1
-        nativeRotateButton.layer.cornerRadius = 25
-        nativeRotateButton.clipsToBounds = true
-        nativeRotateButton.translatesAutoresizingMaskIntoConstraints = false
-        nativeRotateButton.isHidden = true
-        nativeRotateButton.addTarget(self, action: #selector(nativeRotateTapped), for: .touchUpInside)
+        portraitRotateButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
+        portraitRotateButton.layer.borderColor = UIColor.white.cgColor
+        portraitRotateButton.layer.borderWidth = 1
+        portraitRotateButton.layer.cornerRadius = 25
+        portraitRotateButton.clipsToBounds = true
+        portraitRotateButton.translatesAutoresizingMaskIntoConstraints = false
+        portraitRotateButton.isHidden = false
+        portraitRotateButton.addTarget(self, action: #selector(portraitRotateTapped), for: .touchUpInside)
         
-        view.addSubview(nativeRotateButton)
-        view.bringSubviewToFront(nativeRotateButton)
+        view.addSubview(portraitRotateButton)
+        view.bringSubviewToFront(portraitRotateButton)
+        
+        NSLayoutConstraint.activate([
+            portraitRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            portraitRotateButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            portraitRotateButton.widthAnchor.constraint(equalToConstant: 50),
+            portraitRotateButton.heightAnchor.constraint(equalToConstant: 50)
+        ])
+    }
+
+    func setupLandscapeRotateButton() {
+        landscapeRotateButton = UIButton(type: .system)
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold, scale: .medium)
+        let icon = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: config)
+        landscapeRotateButton.setImage(icon, for: .normal)
+        landscapeRotateButton.tintColor = .white
+        
+        landscapeRotateButton.backgroundColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.8)
+        landscapeRotateButton.layer.borderColor = UIColor.white.cgColor
+        landscapeRotateButton.layer.borderWidth = 1
+        landscapeRotateButton.layer.cornerRadius = 25
+        landscapeRotateButton.clipsToBounds = true
+        landscapeRotateButton.translatesAutoresizingMaskIntoConstraints = false
+        landscapeRotateButton.isHidden = true
+        landscapeRotateButton.addTarget(self, action: #selector(landscapeRotateTapped), for: .touchUpInside)
+        
+        view.addSubview(landscapeRotateButton)
+        view.bringSubviewToFront(landscapeRotateButton)
         
         updateRotateButtonConstraints(landscape: false)
     }
@@ -194,14 +222,6 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         updateLockButtonConstraints(landscape: false)
     }
 
-    func setupNavigationBarRotateButton() {
-        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold, scale: .medium)
-        let icon = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: config)
-        let rotateButton = UIBarButtonItem(image: icon, style: .plain, target: self, action: #selector(navigationRotateTapped))
-        rotateButton.tintColor = .label
-        self.navigationItem.rightBarButtonItem = rotateButton
-    }
-
     func setupTapGesture() {
         screenTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleScreenTap))
         screenTapGesture.isEnabled = false
@@ -214,18 +234,18 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         if landscape {
             // Physical bottom-left of screen acts as visual bottom-right in landscape mode
             rotateButtonConstraints = [
-                nativeRotateButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
-                nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-                nativeRotateButton.widthAnchor.constraint(equalToConstant: 50),
-                nativeRotateButton.heightAnchor.constraint(equalToConstant: 50)
+                landscapeRotateButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+                landscapeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+                landscapeRotateButton.widthAnchor.constraint(equalToConstant: 50),
+                landscapeRotateButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         } else {
             // Normal bottom-right safe area in portrait
             rotateButtonConstraints = [
-                nativeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-                nativeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-                nativeRotateButton.widthAnchor.constraint(equalToConstant: 50),
-                nativeRotateButton.heightAnchor.constraint(equalToConstant: 50)
+                landscapeRotateButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+                landscapeRotateButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+                landscapeRotateButton.widthAnchor.constraint(equalToConstant: 50),
+                landscapeRotateButton.heightAnchor.constraint(equalToConstant: 50)
             ]
         }
         NSLayoutConstraint.activate(rotateButtonConstraints)
@@ -260,14 +280,14 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    @objc func nativeRotateTapped() {
-        NSLog("nativeRotateTapped called")
-        setOrientationVisual(false)
+    @objc func portraitRotateTapped() {
+        NSLog("portraitRotateTapped called")
+        setOrientationVisual(true)
     }
 
-    @objc func navigationRotateTapped() {
-        NSLog("navigationRotateTapped called")
-        setOrientationVisual(true)
+    @objc func landscapeRotateTapped() {
+        NSLog("landscapeRotateTapped called")
+        setOrientationVisual(false)
     }
 
     @objc func nativeLockTapped() {
@@ -284,7 +304,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             nativeLockButton.alpha = 1.0
             nativeLockButton.isUserInteractionEnabled = true
             
-            nativeRotateButton.isHidden = true
+            landscapeRotateButton.isHidden = true
             webView.isUserInteractionEnabled = false
             screenTapGesture.isEnabled = true
             
@@ -297,7 +317,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             nativeLockButton.alpha = 1.0
             nativeLockButton.isUserInteractionEnabled = true
             
-            nativeRotateButton.isHidden = false
+            landscapeRotateButton.isHidden = false
             webView.isUserInteractionEnabled = true
             screenTapGesture.isEnabled = false
             
@@ -402,26 +422,30 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
                 self.webView.bounds = CGRect(x: 0, y: 0, width: containerSize.height, height: containerSize.width)
                 self.webView.center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
                 
-                self.nativeRotateButton.transform = CGAffineTransform(rotationAngle: .pi / 2)
-                self.nativeRotateButton.isHidden = false
+                self.landscapeRotateButton.transform = CGAffineTransform(rotationAngle: .pi / 2)
+                self.landscapeRotateButton.isHidden = false
                 
                 self.nativeLockButton.transform = CGAffineTransform(rotationAngle: .pi / 2)
                 self.nativeLockButton.alpha = 1.0
                 self.nativeLockButton.isUserInteractionEnabled = true
                 self.nativeLockButton.isHidden = false
+                
+                self.portraitRotateButton.isHidden = true
             } else {
                 self.webView.transform = .identity
-                self.nativeRotateButton.transform = .identity
-                self.nativeRotateButton.isHidden = true
+                self.landscapeRotateButton.transform = .identity
+                self.landscapeRotateButton.isHidden = true
                 
                 self.nativeLockButton.transform = .identity
                 self.nativeLockButton.isHidden = true
+                
+                self.portraitRotateButton.isHidden = false
                 
                 self.webView.translatesAutoresizingMaskIntoConstraints = false
                 NSLayoutConstraint.activate(self.webViewConstraints)
             }
             
-            self.navigationController?.setNavigationBarHidden(landscape, animated: true)
+            self.navigationController?.setNavigationBarHidden(true, animated: false)
             self.isFullscreen = landscape
             self.setNeedsStatusBarAppearanceUpdate()
             
