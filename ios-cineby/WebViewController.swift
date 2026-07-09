@@ -752,6 +752,10 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                           if (el.id === 'mstream-controls-overlay') continue;
                           if (el.closest('#mstream-controls-overlay')) continue;
                           if (el.nodeName === 'VIDEO' || el.nodeName === 'IFRAME' || el.nodeName === 'BODY' || el.nodeName === 'HTML') continue;
+                          
+                          // CRITICAL: NEVER hide any container that wraps or contains the video/iframe elements!
+                          if (el.querySelector('video') || el.querySelector('iframe')) continue;
+                          
                           if (el.classList.contains('jwplayer') || el.classList.contains('plyr') || 
                               el.classList.contains('artplayer') || el.classList.contains('video-js') || 
                               el.classList.contains('dplayer')) continue;
@@ -826,13 +830,6 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     .playback-locked [class*="control-bar" i]:not(video):not(iframe):not(body):not(html),
                     .playback-locked [class*="button" i]:not(video):not(iframe),
                     .playback-locked [class*="btn" i]:not(video):not(iframe),
-                    .playback-locked [class*="menu" i]:not(video):not(iframe),
-                    .playback-locked [class*="tooltip" i]:not(video):not(iframe),
-                    .playback-locked [class*="title" i]:not(video):not(iframe),
-                    .playback-locked [class*="logo" i]:not(video):not(iframe),
-                    .playback-locked [class*="banner" i]:not(video):not(iframe),
-                    .playback-locked [class*="loading" i]:not(video):not(iframe),
-                    .playback-locked [class*="spinner" i]:not(video):not(iframe),
                     .playback-locked button:not(video):not(iframe),
                     .playback-locked a:not(video):not(iframe),
                     .playback-locked [id*="controls" i]:not(video):not(iframe):not(body):not(html),
@@ -1581,9 +1578,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 '[class*="controls" i]:not(video):not(iframe):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
                 '[class*="controlbar" i]:not(video):not(iframe):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
                 '[class*="control-bar" i]:not(video):not(iframe):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
-                '[class*="button" i]:not(video):not(iframe), [class*="btn" i]:not(video):not(iframe), [class*="menu" i]:not(video):not(iframe) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
-                '[class*="tooltip" i]:not(video):not(iframe), [class*="title" i]:not(video):not(iframe), [class*="logo" i]:not(video):not(iframe) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
-                '[class*="banner" i]:not(video):not(iframe), [class*="loading" i]:not(video):not(iframe), [class*="spinner" i]:not(video):not(iframe) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
+                '[class*="button" i]:not(video):not(iframe), [class*="btn" i]:not(video):not(iframe) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
                 'button:not(video):not(iframe), a:not(video):not(iframe) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
                 '[id*="controls" i]:not(video):not(iframe):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
                 '[id*="controlbar" i]:not(video):not(iframe):not(body):not(html) { display:none!important; opacity:0!important; visibility:hidden!important; pointer-events:none!important; }',
