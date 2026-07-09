@@ -7,7 +7,17 @@ enum ActiveSite {
     case nimegami
 }
 
-class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
+class LeakAvoider: NSObject, WKScriptMessageHandler {
+    weak var delegate: WKScriptMessageHandler?
+    init(delegate: WKScriptMessageHandler) {
+        self.delegate = delegate
+    }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        self.delegate?.userContentController(userContentController, didReceive: message)
+    }
+}
+
+class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var webView: WKWebView!
     private var containerView: UIView!
     private var landingView: UIView!
@@ -20,6 +30,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private var isFullscreen = false
     private var isLandscapeRotated = false
     private var isPlaybackLocked = false
+    private var hasActiveVideo = false
     
     private var unlockAutoHideTimer: Timer?
     private var screenTapGesture: UITapGestureRecognizer!
@@ -62,6 +73,20 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             observer.observe(document.body, { childList: true, subtree: true });
             setInterval(forcePlaysInline, 1000);
             forcePlaysInline();
+
+            // Video presence detection (only post on state change)
+            var lastHasVideo = false;
+            function checkVideoPresence() {
+              var hasVideo = document.querySelector('video') !== null;
+              if (hasVideo !== lastHasVideo) {
+                lastHasVideo = hasVideo;
+                try {
+                  window.webkit.messageHandlers.videoDetector.postMessage({ hasVideo: hasVideo });
+                } catch (e) {}
+              }
+            }
+            setInterval(checkVideoPresence, 1000);
+            checkVideoPresence();
 
             // Listen for playback lock messages and forward recursively
             window.addEventListener('message', function(event) {
@@ -125,6 +150,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         """
         let userScript = WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
         contentController.addUserScript(userScript)
+
+        // Memory-safe LeakAvoider message handler setup
+        contentController.add(LeakAvoider(delegate: self), name: "videoDetector")
 
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
@@ -334,8 +362,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
             self.landingView.alpha = 0
         }) { _ in
             self.landingView.isHidden = true
-            self.portraitRotateButton.isHidden = false
             self.switchWebButton.isHidden = false
+            // Keep portraitRotateButton hidden until a video is detected!
+            self.portraitRotateButton.isHidden = true
         }
     }
 
@@ -379,7 +408,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         portraitRotateButton.layer.cornerRadius = 25
         portraitRotateButton.clipsToBounds = true
         portraitRotateButton.translatesAutoresizingMaskIntoConstraints = false
-        portraitRotateButton.isHidden = true // hidden initially
+        portraitRotateButton.isHidden = true // hidden initially (shown when video is found)
         portraitRotateButton.addTarget(self, action: #selector(portraitRotateTapped), for: .touchUpInside)
         
         view.addSubview(portraitRotateButton)
@@ -619,6 +648,33 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
+    func updateRotateButtonVisibility(hasVideo: Bool) {
+        self.hasActiveVideo = hasVideo
+        
+        // Only toggle visibility in portrait mode.
+        // In landscape, we let setOrientationVisual layout determine button visibility.
+        if !isLandscapeRotated {
+            UIView.animate(withDuration: 0.3) {
+                self.portraitRotateButton.isHidden = !hasVideo
+            }
+        }
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "videoDetector" {
+            guard let body = message.body as? [String: Any],
+                  let hasVideo = body["hasVideo"] as? Bool else { return }
+            
+            NSLog("videoDetector received hasVideo: \(hasVideo)")
+            updateRotateButtonVisibility(hasVideo: hasVideo)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        NSLog("didStartProvisionalNavigation - resetting rotate button until video is found")
+        updateRotateButtonVisibility(hasVideo: false)
+    }
+
     func setOrientationVisual(_ landscape: Bool) {
         self.isLandscapeRotated = landscape
         
@@ -678,7 +734,9 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
                 self.nativeLockButton.transform = .identity
                 self.nativeLockButton.isHidden = true
                 
-                self.portraitRotateButton.isHidden = false
+                // Restore portrait state: Switch button is visible,
+                // Rotate button is only visible if a video was actively detected.
+                self.portraitRotateButton.isHidden = !self.hasActiveVideo
                 self.switchWebButton.isHidden = false
                 
                 self.webView.translatesAutoresizingMaskIntoConstraints = false

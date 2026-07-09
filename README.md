@@ -8,6 +8,7 @@ A minimalist native iOS wrapper for movie & anime streaming portals (Cineby & Ni
 
 1. **Bypass Orientation Lock**: Instantly watch video streams in fullscreen landscape even when the system *Portrait Orientation Lock* is active on your iPhone.
 2. **Reddit-Style Floating Controls**: Floating circular control buttons (50x50) styled using native Apple **SF Symbols** in both portrait and landscape modes (replacing navigation headers completely).
+   * **Context-Sensitive Rotate Button**: The rotation button remains completely hidden while you are browsing lists or search descriptions. It automatically fades in **only when a video player/video element is actively detected** on the screen.
 3. **Netflix-Style Playback Lock**:
    * Instant screen lock that disables all touch interactions on the video player/WebView (blocking ads, pop-ups, and accidental pause/seeking).
    * **Auto-Hide**: The red lock button automatically fades out after 3 seconds of inactivity.
@@ -40,7 +41,7 @@ A minimalist native iOS wrapper for movie & anime streaming portals (Cineby & Ni
 
 1. Open the app and select your desired streaming portal (Cineby or Nimegami) from the selection landing screen.
 2. Tap the floating swap button `arrow.left.arrow.right` in the top-right corner of the portrait screen at any time to switch instantly to the other website.
-3. Tap the circular rotation icon `arrow.triangle.2.circlepath` (below the swap button in the top-right) to enter landscape mode.
+3. **Rotate Screen**: Once you open a video and it begins playing, the circular rotation icon `arrow.triangle.2.circlepath` will appear below the swap button in the top-right. Tap it to enter landscape mode.
 4. **Locking the Screen**: Tap the unlocked padlock icon `lock.open.fill` at the bottom-left of the landscape screen. The button will turn red, lock touch gestures, and fade out in 3 seconds.
 5. **Unlocking the Screen**: Tap anywhere on the blank screen to show the red padlock button, then tap the padlock button itself to unlock.
 6. Tap the circular rotation button in the bottom-right of the landscape screen to return to portrait mode.
