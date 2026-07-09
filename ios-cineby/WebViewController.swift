@@ -322,6 +322,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             }
 
             // Persistently hide default player controls, timelines, and timestamps
+            // Uses specific named selectors only — avoids wildcards that can hide video
+            // rendering layers or our own dedicated overlay.
             function hideDefaultControls() {
               var style = document.getElementById('mstream-default-controls-hide-override');
               if (!style) {
@@ -329,24 +331,42 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 style.id = 'mstream-default-controls-hide-override';
                 document.head.appendChild(style);
                 style.innerHTML = `
-                  .jw-controls, .jw-controlbar, .jw-title, .jw-logo, .jw-nextup-container, .jw-display, .jw-display-icon, .jw-display-icon-container,
+                  /* JW Player */
+                  .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
+                  .jw-nextup-container, .jw-display-icon-container,
+                  .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
+                  .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
+                  /* Video.js */
                   .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
-                  .plyr__controls, 
-                  .art-control, .art-controls, .art-mask, .art-state, .art-state-play, .art-play, .art-poster, .art-bottom, .art-progress,
-                  .jw-settings-menu, .jw-settings-submenu, .jw-settings-content, .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
-                  .dplayer-menu, .dplayer-setting-box, .shaka-settings-menu,
-                  [class*="control" i], [class*="toolbar" i], [class*="play-button" i], [class*="play-icon" i], 
-                  [class*="play-btn" i], [class*="playbutton" i], [class*="playButton" i], [class*="big-play" i], 
-                  [class*="display-icon" i], [class*="display-btn" i], [class*="overlay" i], [class*="mask" i], 
-                  [class*="poster" i], [class*="preview" i], [class*="spinner" i], [class*="loading" i], 
-                  [class*="player-controls" i], [class*="video-controls" i], [class*="button" i], [class*="btn" i], 
-                  [class*="progress" i], [class*="volume" i], [class*="time" i], [class*="title" i], 
-                  [class*="logo" i], [class*="menu" i], [class*="settings" i], [class*="setting" i], 
-                  [class*="bottom-bar" i], [class*="control-bar" i], [class*="controls-bar" i], [class*="player-bar" i], 
-                  [class*="bottom-controls" i], [class*="controller" i], [class*="dplayer" i], [class*="shaka" i] {
+                  /* Plyr */
+                  .plyr__controls,
+                  /* Artplayer */
+                  .art-control, .art-controls, .art-bottom, .art-progress,
+                  .art-state, .art-state-play, .art-play, .art-poster,
+                  /* DPlayer */
+                  .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
+                  /* Shaka Player */
+                  .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
+                  /* Cineby-specific: known controlbar class names */
+                  .cb-controlbar, .cb-control, .cb-controls,
+                  .player-controlbar, .player-bottom, .player-ui,
+                  .video-controlbar, .video-bottombar {
                       display: none !important;
                       opacity: 0 !important;
                       visibility: hidden !important;
+                      pointer-events: none !important;
+                  }
+                  /* Always keep our dedicated controls fully interactive */
+                  #mstream-controls-overlay,
+                  #mstream-controls-overlay * {
+                      display: flex !important;
+                      opacity: 1 !important;
+                      visibility: visible !important;
+                      pointer-events: auto !important;
+                  }
+                  #mstream-controls-overlay[style*="opacity: 0"],
+                  #mstream-controls-overlay[style*="opacity:0"] {
+                      opacity: 0 !important;
                       pointer-events: none !important;
                   }
                 `;
@@ -398,26 +418,33 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                       return;
                     }
                     var selectors = [
-                      '.jw-controls', '.jw-controlbar', '.jw-title', '.jw-logo', '.jw-nextup-container', '.jw-display', '.jw-display-icon', '.jw-display-icon-container',
+                      /* JW Player */
+                      '.jw-controls', '.jw-controlbar', '.jw-title', '.jw-logo',
+                      '.jw-nextup-container', '.jw-display-icon-container',
+                      '.jw-settings-menu', '.jw-settings-submenu', '.jw-settings-content',
+                      '.jw-submenu', '.jw-icon-inline', '.jw-slider-container', '.jw-time-tip',
+                      /* Video.js */
                       '.vjs-control-bar', '.vjs-big-play-button', '.vjs-loading-spinner', '.vjs-poster',
-                      '.plyr__controls', 
-                      '.art-control', '.art-controls', '.art-mask', '.art-state', '.art-state-play', '.art-play', '.art-poster', '.art-bottom', '.art-progress',
-                      '.jw-settings-menu', '.jw-settings-submenu', '.jw-settings-content', '.jw-submenu', '.jw-icon-inline', '.jw-slider-container', '.jw-time-tip',
-                      '.dplayer-menu', '.dplayer-setting-box', '.shaka-settings-menu',
-                      '[class*="control" i]', '[class*="toolbar" i]', '[class*="play-button" i]', '[class*="play-icon" i]', 
-                      '[class*="play-btn" i]', '[class*="playbutton" i]', '[class*="playButton" i]', '[class*="big-play" i]', 
-                      '[class*="display-icon" i]', '[class*="display-btn" i]', '[class*="overlay" i]', '[class*="mask" i]', 
-                      '[class*="poster" i]', '[class*="preview" i]', '[class*="spinner" i]', '[class*="loading" i]', 
-                      '[class*="player-controls" i]', '[class*="video-controls" i]', '[class*="button" i]', '[class*="btn" i]', 
-                      '[class*="progress" i]', '[class*="volume" i]', '[class*="time" i]', '[class*="title" i]', 
-                      '[class*="logo" i]', '[class*="menu" i]', '[class*="settings" i]', '[class*="setting" i]', 
-                      '[class*="bottom-bar" i]', '[class*="control-bar" i]', '[class*="controls-bar" i]', '[class*="player-bar" i]', 
-                      '[class*="bottom-controls" i]', '[class*="controller" i]', '[class*="dplayer" i]', '[class*="shaka" i]'
+                      /* Plyr */
+                      '.plyr__controls',
+                      /* Artplayer */
+                      '.art-control', '.art-controls', '.art-bottom', '.art-progress',
+                      '.art-state', '.art-state-play', '.art-play', '.art-poster',
+                      /* DPlayer */
+                      '.dplayer-controller', '.dplayer-bar-wrap', '.dplayer-menu', '.dplayer-setting-box',
+                      /* Shaka Player */
+                      '.shaka-bottom-controls', '.shaka-settings-menu', '.shaka-overflow-menu',
+                      /* Cineby-specific */
+                      '.cb-controlbar', '.cb-control', '.cb-controls',
+                      '.player-controlbar', '.player-bottom', '.player-ui',
+                      '.video-controlbar', '.video-bottombar'
                     ];
                     selectors.forEach(function(sel) {
                       try {
                         var elements = document.querySelectorAll(sel);
                         for (var i = 0; i < elements.length; i++) {
+                          // Never hide our own dedicated overlay
+                          if (elements[i].id === 'mstream-controls-overlay') continue;
                           elements[i].style.setProperty('display', 'none', 'important');
                           elements[i].style.setProperty('opacity', '0', 'important');
                           elements[i].style.setProperty('visibility', 'hidden', 'important');
@@ -471,48 +498,26 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                     document.head.appendChild(style);
                   }
                   style.innerHTML = `
-                    .jw-controls, .jw-controlbar, .jw-title, .jw-logo, .jw-nextup-container, .jw-display, .jw-display-icon, .jw-display-icon-container,
+                    /* JW Player */
+                    .jw-controls, .jw-controlbar, .jw-title, .jw-logo,
+                    .jw-nextup-container, .jw-display-icon-container,
+                    .jw-settings-menu, .jw-settings-submenu, .jw-settings-content,
+                    .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
+                    /* Video.js */
                     .vjs-control-bar, .vjs-big-play-button, .vjs-loading-spinner, .vjs-poster,
-                    .plyr__controls, 
-                    .art-control, .art-controls, .art-mask, .art-state, .art-state-play, .art-play, .art-poster, .art-bottom, .art-progress,
-                    .jw-settings-menu, .jw-settings-submenu, .jw-settings-content, .jw-submenu, .jw-icon-inline, .jw-slider-container, .jw-time-tip,
-                    .dplayer-menu, .dplayer-setting-box, .shaka-settings-menu,
-                    [class*="control" i], 
-                    [class*="toolbar" i], 
-                    [class*="play-button" i], 
-                    [class*="play-icon" i], 
-                    [class*="play-btn" i], 
-                    [class*="playbutton" i], 
-                    [class*="playButton" i], 
-                    [class*="big-play" i], 
-                    [class*="display-icon" i],
-                    [class*="display-btn" i],
-                    [class*="overlay" i], 
-                    [class*="mask" i], 
-                    [class*="poster" i], 
-                    [class*="preview" i],
-                    [class*="spinner" i],
-                    [class*="loading" i],
-                    [class*="player-controls" i],
-                    [class*="video-controls" i],
-                    [class*="button" i],
-                    [class*="btn" i],
-                    [class*="progress" i],
-                    [class*="volume" i],
-                    [class*="time" i],
-                    [class*="title" i],
-                    [class*="logo" i],
-                    [class*="menu" i],
-                    [class*="settings" i],
-                    [class*="setting" i],
-                    [class*="bottom-bar" i],
-                    [class*="control-bar" i],
-                    [class*="controls-bar" i],
-                    [class*="player-bar" i],
-                    [class*="bottom-controls" i],
-                    [class*="controller" i],
-                    [class*="dplayer" i],
-                    [class*="shaka" i] {
+                    /* Plyr */
+                    .plyr__controls,
+                    /* Artplayer */
+                    .art-control, .art-controls, .art-bottom, .art-progress,
+                    .art-state, .art-state-play, .art-play, .art-poster,
+                    /* DPlayer */
+                    .dplayer-controller, .dplayer-bar-wrap, .dplayer-menu, .dplayer-setting-box,
+                    /* Shaka Player */
+                    .shaka-bottom-controls, .shaka-settings-menu, .shaka-overflow-menu,
+                    /* Cineby-specific */
+                    .cb-controlbar, .cb-control, .cb-controls,
+                    .player-controlbar, .player-bottom, .player-ui,
+                    .video-controlbar, .video-bottombar {
                         display: none !important;
                         opacity: 0 !important;
                         visibility: hidden !important;
