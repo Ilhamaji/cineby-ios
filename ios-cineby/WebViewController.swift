@@ -95,7 +95,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                   set: function(val) {
                     var isLocked = document.body.classList.contains('playback-locked') || 
                                    document.documentElement.classList.contains('playback-locked');
-                    if (isLocked) {
+                    var isCineby = window.location.hostname.includes('cineby') || (document.referrer && document.referrer.includes('cineby'));
+                    if (isLocked && !isCineby) {
                       var cur = origCurrentTime.get.call(this);
                       var diff = Math.abs(val - cur);
                       // Block significant jumps (> 1.5s) when locked
@@ -116,7 +117,8 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
                 HTMLMediaElement.prototype.fastSeek = function(val) {
                   var isLocked = document.body.classList.contains('playback-locked') || 
                                  document.documentElement.classList.contains('playback-locked');
-                  if (isLocked) {
+                  var isCineby = window.location.hostname.includes('cineby') || (document.referrer && document.referrer.includes('cineby'));
+                  if (isLocked && !isCineby) {
                     var cur = this.currentTime;
                     if (Math.abs(val - cur) > 1.5) {
                       return;
