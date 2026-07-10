@@ -1,15 +1,15 @@
 # Cineby iOS — Minimal WKWebView App
 
-Instruksi singkat untuk menjalankan demo ini di Xcode:
+Quick instructions for running this demo in Xcode:
 
-1. Buka Xcode → Create a new project → App (iOS).
-2. Pilih interface `UIKit` dan lifecycle `UIKit App Delegate`.
-3. Hapus Main.storyboard (opsional) dan atur `SceneDelegate` untuk membuat `WebViewController` sebagai root.
-4. Salin file `AppDelegate.swift`, `SceneDelegate.swift`, dan `WebViewController.swift` dari folder ini ke target Xcode Anda.
-5. Pastikan Deployment Target iOS 13+.
-6. Build & Run di simulator atau perangkat nyata. Untuk tes orientation penuh gunakan perangkat fisik.
+1. Open Xcode → Create a new project → App (iOS).
+2. Choose the `UIKit` interface and `UIKit App Delegate` lifecycle.
+3. Delete Main.storyboard (optional) and configure `SceneDelegate` to make `WebViewController` the root.
+4. Copy `AppDelegate.swift`, `SceneDelegate.swift`, and `WebViewController.swift` from this folder into your Xcode target.
+5. Ensure the Deployment Target is iOS 13+.
+6. Build & Run on a simulator or a physical device. For full orientation testing, use a physical device.
 
-Catatan:
+Notes:
 
-- Aplikasi ini menyuntikkan sebuah tombol `Rotate` ke halaman web (`cineby.at`). Tombol akan mengirimkan pesan ke native untuk toggle orientasi antara portrait/landscape.
-- Anda mungkin perlu menyesuaikan selektor JS jika situs mengubah struktur DOM.
+- This app injects a `Rotate` button into the web page (`cineby.at`). The button sends a message to the native side to toggle orientation between portrait and landscape.
+- You might need to adjust the JS selectors if the site changes its DOM structure.
