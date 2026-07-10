@@ -178,126 +178,95 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
               }
             }, { passive: false, capture: true });
 
-            // Deteksi apakah ini situs Cineby — jika ya, biarkan native controls
-            var isCineby = window.location.hostname.includes('cineby') || (document.referrer && document.referrer.includes('cineby'));
-            
-            if (isCineby) {
-              // Pre-inject CSS lock rule untuk Cineby — sudah siap sejak awal,
-              // cukup toggle class 'cineby-locked' di <html> untuk hide/show secara instan
-              var lockStyle = document.getElementById('cineby-lock-preload');
-              if (!lockStyle) {
-                lockStyle = document.createElement('style');
-                lockStyle.id = 'cineby-lock-preload';
-                (document.head || document.documentElement).appendChild(lockStyle);
-              }
-              lockStyle.innerHTML = [
-                'video::-webkit-media-controls { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-enclosure { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-panel { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-play-button { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-overlay-play-button { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-start-playback-button { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-volume-slider { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-timeline { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-current-time-display { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-time-remaining-display { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-mute-button { display:none!important; opacity:0!important; }',
-                'video::-webkit-media-controls-fullscreen-button { display:none!important; opacity:0!important; }',
-                '*::-webkit-media-controls { display:none!important; }',
-                '*::-webkit-media-controls-overlay-play-button { display:none!important; }',
-                '*::-webkit-media-controls-start-playback-button { display:none!important; }'
-              ].join(' ');
-            } else {
-              // Hanya blokir native controls untuk NON-Cineby (misal Nimegami)
-              if (typeof HTMLVideoElement !== 'undefined') {
-                try {
-                  Object.defineProperty(HTMLVideoElement.prototype, 'controls', {
-                    get: function() { return false; },
-                    set: function() {},
-                    configurable: true,
-                    enumerable: true
-                  });
-                } catch(e) {}
+            // Block native media controls for ALL portals (both Cineby & Nimegami)
+            if (typeof HTMLVideoElement !== 'undefined') {
+              try {
+                Object.defineProperty(HTMLVideoElement.prototype, 'controls', {
+                  get: function() { return false; },
+                  set: function() {},
+                  configurable: true,
+                  enumerable: true
+                });
+              } catch(e) {}
 
-                var _origSetAttr = HTMLVideoElement.prototype.setAttribute;
-                HTMLVideoElement.prototype.setAttribute = function(name, val) {
-                  if (name === 'controls' || name === 'Controls') return;
-                  return _origSetAttr.apply(this, arguments);
-                };
-              }
+              var _origSetAttr = HTMLVideoElement.prototype.setAttribute;
+              HTMLVideoElement.prototype.setAttribute = function(name, val) {
+                if (name === 'controls' || name === 'Controls') return;
+                return _origSetAttr.apply(this, arguments);
+              };
+            }
 
-              // Inject webkit media controls hiding CSS — hanya untuk non-Cineby
-              var earlyStyle = document.getElementById('mstream-early-hide');
-              if (!earlyStyle) {
-                earlyStyle = document.createElement('style');
-                earlyStyle.id = 'mstream-early-hide';
-                (document.head || document.documentElement).appendChild(earlyStyle);
-              }
-              earlyStyle.innerHTML = [
-                'video::-webkit-media-controls { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-enclosure { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-panel { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-start-playback-button { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-overlay-play-button { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-volume-slider { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-timeline { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-current-time-display { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-time-remaining-display { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-mute-button { display: none !important; opacity: 0 !important; }',
-                'video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; }',
-                '*::-webkit-media-controls { display: none !important; }',
-                '*::-webkit-media-controls-overlay-play-button { display: none !important; }',
-                '*::-webkit-media-controls-start-playback-button { display: none !important; }',
-                'video { -webkit-media-controls-display: none; }',
-                '* { -webkit-touch-callout: none !important; }'
-              ].join(' ');
+            // Inject webkit media controls hiding CSS — for ALL portals
+            var earlyStyle = document.getElementById('mstream-early-hide');
+            if (!earlyStyle) {
+              earlyStyle = document.createElement('style');
+              earlyStyle.id = 'mstream-early-hide';
+              (document.head || document.documentElement).appendChild(earlyStyle);
+            }
+            earlyStyle.innerHTML = [
+              'video::-webkit-media-controls { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-enclosure { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-panel { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-start-playback-button { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-overlay-play-button { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-volume-slider { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-timeline { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-current-time-display { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-time-remaining-display { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-mute-button { display: none !important; opacity: 0 !important; }',
+              'video::-webkit-media-controls-fullscreen-button { display: none !important; opacity: 0 !important; }',
+              '*::-webkit-media-controls { display: none !important; }',
+              '*::-webkit-media-controls-overlay-play-button { display: none !important; }',
+              '*::-webkit-media-controls-start-playback-button { display: none !important; }',
+              'video { -webkit-media-controls-display: none; }',
+              '* { -webkit-touch-callout: none !important; }'
+            ].join(' ');
 
-              function stripNativeVideoUI(v) {
-                try {
-                  if ('disableRemotePlayback' in v) v.disableRemotePlayback = true;
-                  if ('disablePictureInPicture' in v) v.disablePictureInPicture = true;
-                  v.controls = false;
-                  v.removeAttribute('controls');
-                } catch(e) {}
-              }
-              document.querySelectorAll('video').forEach(stripNativeVideoUI);
-              var videoStripper = new MutationObserver(function(muts) {
-                muts.forEach(function(m) {
+            function stripNativeVideoUI(v) {
+              try {
+                if ('disableRemotePlayback' in v) v.disableRemotePlayback = true;
+                if ('disablePictureInPicture' in v) v.disablePictureInPicture = true;
+                v.controls = false;
+                v.removeAttribute('controls');
+              } catch(e) {}
+            }
+            document.querySelectorAll('video').forEach(stripNativeVideoUI);
+            var videoStripper = new MutationObserver(function(muts) {
+              muts.forEach(function(m) {
+                m.addedNodes.forEach(function(node) {
+                  if (node.nodeName === 'VIDEO') stripNativeVideoUI(node);
+                  if (node.querySelectorAll) node.querySelectorAll('video').forEach(stripNativeVideoUI);
+                });
+              });
+            });
+            videoStripper.observe(document.documentElement, { childList: true, subtree: true });
+
+            var controlsGuard = new MutationObserver(function(mutations) {
+              mutations.forEach(function(m) {
+                if (m.type === 'attributes' && m.attributeName === 'controls') {
+                  m.target.removeAttribute('controls');
+                }
+                if (m.type === 'childList') {
                   m.addedNodes.forEach(function(node) {
-                    if (node.nodeName === 'VIDEO') stripNativeVideoUI(node);
-                    if (node.querySelectorAll) node.querySelectorAll('video').forEach(stripNativeVideoUI);
+                    if (node.nodeName === 'VIDEO') {
+                      node.removeAttribute('controls');
+                    }
+                    if (node.querySelectorAll) {
+                      node.querySelectorAll('video').forEach(function(v) {
+                        v.removeAttribute('controls');
+                      });
+                    }
                   });
-                });
+                }
               });
-              videoStripper.observe(document.documentElement, { childList: true, subtree: true });
-
-              var controlsGuard = new MutationObserver(function(mutations) {
-                mutations.forEach(function(m) {
-                  if (m.type === 'attributes' && m.attributeName === 'controls') {
-                    m.target.removeAttribute('controls');
-                  }
-                  if (m.type === 'childList') {
-                    m.addedNodes.forEach(function(node) {
-                      if (node.nodeName === 'VIDEO') {
-                        node.removeAttribute('controls');
-                      }
-                      if (node.querySelectorAll) {
-                        node.querySelectorAll('video').forEach(function(v) {
-                          v.removeAttribute('controls');
-                        });
-                      }
-                    });
-                  }
-                });
-              });
-              controlsGuard.observe(document.documentElement, {
-                attributes: true,
-                attributeFilter: ['controls'],
-                childList: true,
-                subtree: true
-              });
-            } // end !isCineby
+            });
+            controlsGuard.observe(document.documentElement, {
+              attributes: true,
+              attributeFilter: ['controls'],
+              childList: true,
+              subtree: true
+            });
           } catch(e) {}
         })();
         """
@@ -1714,41 +1683,58 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
     }
 
     private func reinjectControlsHide() {
-        // Untuk Cineby: jangan hide native controls — biarkan player bawaan tampil
-        // Untuk Nimegami: hide semua controls dan keep dedicated overlay
         let js = """
         (function() {
           try {
             var isCineby = window.location.hostname.includes('cineby') || (document.referrer && document.referrer.includes('cineby'));
-            if (isCineby) return; // Cineby pakai native controls — jangan diubah di sini
-
-            var css = [
-              'video::-webkit-media-controls{display:none!important}',
-              'video::-webkit-media-controls-enclosure{display:none!important}',
-              'video::-webkit-media-controls-panel{display:none!important}',
-              'video::-webkit-media-controls-play-button{display:none!important}',
-              'video::-webkit-media-controls-overlay-play-button{display:none!important}',
-              'video::-webkit-media-controls-start-playback-button{display:none!important}',
-              'video::-webkit-media-controls-timeline{display:none!important}',
-              'video::-webkit-media-controls-volume-slider{display:none!important}',
-              'video::-webkit-media-controls-fullscreen-button{display:none!important}',
-              '.jw-controls,.jw-controlbar,.vjs-control-bar,.vjs-big-play-button',
-              ',.plyr__controls,.plyr__play-large,.plyr__control--overlaid',
-              ',.art-control,.art-controls,.art-bottom,.art-progress,.art-state,.art-play,.art-poster,.art-layer,.art-layers',
-              ',.dplayer-controller,.dplayer-bar-wrap',
-              ',.shaka-bottom-controls,.shaka-settings-menu',
-              ',.fp-controls,.fp-ui',
-              ',.player-controls,.player-controlbar,.player-bottom,.player-ui',
-              ',.video-controls,.video-controlbar,.video-bottombar',
-              ',[class*=controlbar]:not(#mstream-controls-overlay)',
-              ',[class*=control-bar]:not(#mstream-controls-overlay)',
-              ',[class*=player-control]:not(#mstream-controls-overlay)',
-              ',[class*=video-control]:not(#mstream-controls-overlay)',
-              '{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}',
-              '#mstream-controls-overlay{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
-              '#mstream-controls-overlay *{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
-              '#mstream-controls-overlay[style*="opacity: 0"],#mstream-controls-overlay[style*="opacity:0"]{opacity:0!important;pointer-events:none!important}'
-            ].join('');
+            var css = '';
+            if (isCineby) {
+              css = [
+                'video::-webkit-media-controls { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-enclosure { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-panel { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-play-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-overlay-play-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-start-playback-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-volume-slider { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-timeline { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-current-time-display { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-time-remaining-display { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-mute-button { display:none!important; opacity:0!important; }',
+                'video::-webkit-media-controls-fullscreen-button { display:none!important; opacity:0!important; }',
+                '*::-webkit-media-controls { display:none!important; }',
+                '*::-webkit-media-controls-overlay-play-button { display:none!important; }',
+                '*::-webkit-media-controls-start-playback-button { display:none!important; }'
+              ].join('');
+            } else {
+              css = [
+                'video::-webkit-media-controls{display:none!important}',
+                'video::-webkit-media-controls-enclosure{display:none!important}',
+                'video::-webkit-media-controls-panel{display:none!important}',
+                'video::-webkit-media-controls-play-button{display:none!important}',
+                'video::-webkit-media-controls-overlay-play-button{display:none!important}',
+                'video::-webkit-media-controls-start-playback-button{display:none!important}',
+                'video::-webkit-media-controls-timeline{display:none!important}',
+                'video::-webkit-media-controls-volume-slider{display:none!important}',
+                'video::-webkit-media-controls-fullscreen-button{display:none!important}',
+                '.jw-controls,.jw-controlbar,.vjs-control-bar,.vjs-big-play-button',
+                ',.plyr__controls,.plyr__play-large,.plyr__control--overlaid',
+                ',.art-control,.art-controls,.art-bottom,.art-progress,.art-state,.art-play,.art-poster,.art-layer,.art-layers',
+                ',.dplayer-controller,.dplayer-bar-wrap',
+                ',.shaka-bottom-controls,.shaka-settings-menu',
+                ',.fp-controls,.fp-ui',
+                ',.player-controls,.player-controlbar,.player-bottom,.player-ui',
+                ',.video-controls,.video-controlbar,.video-bottombar',
+                ',[class*=controlbar]:not(#mstream-controls-overlay)',
+                ',[class*=control-bar]:not(#mstream-controls-overlay)',
+                ',[class*=player-control]:not(#mstream-controls-overlay)',
+                ',[class*=video-control]:not(#mstream-controls-overlay)',
+                '{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}',
+                '#mstream-controls-overlay{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
+                '#mstream-controls-overlay *{display:flex!important;visibility:visible!important;pointer-events:auto!important}',
+                '#mstream-controls-overlay[style*="opacity: 0"],#mstream-controls-overlay[style*="opacity:0"]{opacity:0!important;pointer-events:none!important}'
+              ].join('');
+            }
 
             var s = document.getElementById('mstream-reinject-hide');
             if (!s) {
@@ -1759,6 +1745,7 @@ class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, W
             s.textContent = css;
 
             document.querySelectorAll('video').forEach(function(v) {
+              v.controls = false;
               v.removeAttribute('controls');
             });
           } catch(e) {}
